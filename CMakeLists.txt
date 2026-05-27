@@ -137,6 +137,8 @@ endif()
 add_library(orion_core STATIC
     src/core/GameSimulation.cpp
     src/core/SaveLoad.cpp
+    src/core/EconomyConfig.cpp
+    src/core/TechTree.cpp
     # More files will be moved here over time (GameState logic, turn processing, etc.)
 )
 
@@ -184,6 +186,22 @@ else()
         -Wno-missing-field-initializers
     )
 endif()
+
+# =============================================================================
+# Copy data files (economy.json, tech_tree.json, etc.) to the runtime directory
+# so the game can load them from bin/data/ at runtime.
+# =============================================================================
+set(DATA_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data")
+set(DATA_DEST_DIR "$<TARGET_FILE_DIR:orion-reborn>/data")
+
+add_custom_command(
+    TARGET orion-reborn POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${DATA_DEST_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${DATA_SOURCE_DIR}"
+            "${DATA_DEST_DIR}"
+    COMMENT "Copying game data files to ${DATA_DEST_DIR}"
+)
 
 # =============================================================================
 # Platform-specific linking (raylib often needs these explicitly)

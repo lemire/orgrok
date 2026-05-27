@@ -1,6 +1,9 @@
 #pragma once
 
 #include "core/GameState.hpp"
+#include "core/EconomyConfig.hpp"
+#include "core/TechTree.hpp"
+
 #include <string>
 #include <vector>
 #include <functional>
@@ -39,6 +42,13 @@ void processEndOfTurn();  // moved (staged extraction complete)
 
 // Simple helper for tests
 void resetGameToNewGame(const std::string& race = "Human");
+
+// Data-driven configuration (loaded at new game start)
+extern orion::EconomyConfig gEconomyConfig;
+extern orion::TechTree gTechTree;
+
+// Convenience accessors that combine loaded data with current game state
+int getCurrentFactoriesPerPop();
 
 // Travel & combat helpers (moved in stages so processEndOfTurn can live in core)
 float GetSystemDistance(const orion::StarSystem* a, const orion::StarSystem* b);

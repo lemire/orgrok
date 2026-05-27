@@ -75,7 +75,11 @@ struct Colony {
     // techBonus and racialProdMod come from the caller.
     void recalculateOutputs(PlanetSize size, PlanetType type, Richness richness,
                             uint32_t traits, float planetMaxPop,
-                            float techBonus = 1.0f, float racialProdMod = 1.0f) {
+                            float techBonus = 1.0f, float racialProdMod = 1.0f,
+                            // Economy config parameters (wired from gEconomyConfig)
+                            float basePopIndustry = 0.8f,
+                            float maintenanceRate = 0.22f,
+                            float pollutionPerIndustry = 0.28f) {
 
         const float pop = population;
         if (pop < 0.1f) {
@@ -95,8 +99,8 @@ struct Colony {
         researchOutput = pop * 0.55f * researchBonus;
 
         // --- Industry: Clean formula ---
-        // Base from population
-        float baseIndustry = pop * 0.8f;
+        // Base from population (now driven by loaded config)
+        float baseIndustry = pop * basePopIndustry;
 
         // Planet quality factors (transparent)
         float richFactor = 0.65f + (static_cast<int>(richness) - 1) * 0.28f;
@@ -122,13 +126,13 @@ struct Colony {
         grossIndustry *= racialProdMod;
 
         // Simple maintenance / overhead (no more slider tax)
-        float maintenance = grossIndustry * 0.22f;   // 22% always goes to basic upkeep & defense
+        float maintenance = grossIndustry * maintenanceRate;   // driven by economy config
         netProduction = std::max(0.0f, grossIndustry - maintenance);
 
         productionOutput = grossIndustry;
 
         // Simple pollution model (reduced by any completed ecology-style buildings)
-        pollution = grossIndustry * 0.28f;
+        pollution = grossIndustry * pollutionPerIndustry;
         float ecoClean = 0.0f;
         for (const auto& b : completedBuildings) {
             if (b.find("Ecology") != std::string::npos || b.find("Clean") != std::string::npos) ecoClean += 0.12f;

@@ -26,3 +26,14 @@ target_link_libraries(orion_tests
 
 # Make ctest aware of these tests
 catch_discover_tests(orion_tests)
+
+# Copy data files next to the test executable (so tests can load economy/tech JSON if needed)
+set(TEST_DATA_DEST_DIR "$<TARGET_FILE_DIR:orion_tests>/data")
+add_custom_command(
+    TARGET orion_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${TEST_DATA_DEST_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/../data"
+            "${TEST_DATA_DEST_DIR}"
+    COMMENT "Copying game data files for tests"
+)

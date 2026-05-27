@@ -1,0 +1,710 @@
+{
+  "version": 1,
+  "description": "Complete tech tree for Orion Reborn. 8 research categories with 8 levels each. Effects are designed to integrate with the economy.json model.",
+  "research_cost_scaling": {
+    "formula": "base_cost * (1.55 ^ (level - 1))",
+    "notes": "Costs increase significantly at higher levels. Actual cost also modified by research allocation and planet bonuses."
+  },
+  "categories": {
+    "biology": {
+      "display_name": "Biology",
+      "focus": "Population growth and food production",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Hydroponic Farms",
+          "description": "Basic hydroponics increase food output on all planets.",
+          "base_research_cost": 80,
+          "effects": {
+            "food_multiplier": 1.25
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Improved Fertilizers",
+          "description": "Better agricultural techniques boost planetary growth rates.",
+          "base_research_cost": 140,
+          "effects": {
+            "growth_multiplier": 1.15
+          },
+          "prerequisites": ["biology.1"]
+        },
+        {
+          "level": 3,
+          "name": "Genetic Engineering",
+          "description": "Unlocks the Cloning Center planetary building.",
+          "base_research_cost": 220,
+          "effects": {
+            "unlocks_building": "Cloning Center"
+          },
+          "prerequisites": ["biology.2"]
+        },
+        {
+          "level": 4,
+          "name": "Advanced Cloning",
+          "description": "Significantly faster population growth across the empire.",
+          "base_research_cost": 340,
+          "effects": {
+            "growth_multiplier": 1.40
+          },
+          "prerequisites": ["biology.3"]
+        },
+        {
+          "level": 5,
+          "name": "Bio-Enhancement",
+          "description": "Population works more efficiently and planets can support slightly more people.",
+          "base_research_cost": 520,
+          "effects": {
+            "worker_output_bonus": 0.3,
+            "max_pop_flat_bonus": 2
+          },
+          "prerequisites": ["biology.4"]
+        },
+        {
+          "level": 6,
+          "name": "Cybernetic Life Support",
+          "description": "Reduces the growth penalty from crowding.",
+          "base_research_cost": 780,
+          "effects": {
+            "crowding_penalty_reduction": 0.5
+          },
+          "prerequisites": ["biology.5"]
+        },
+        {
+          "level": 7,
+          "name": "Evolutionary Jump",
+          "description": "All planets gain a flat +1 population per turn.",
+          "base_research_cost": 1150,
+          "effects": {
+            "flat_population_per_turn": 1
+          },
+          "prerequisites": ["biology.6"]
+        },
+        {
+          "level": 8,
+          "name": "Immortal Biology",
+          "description": "Eliminates natural population decay. Massive growth on rich and ultra-rich worlds.",
+          "base_research_cost": 1700,
+          "effects": {
+            "no_natural_death": true,
+            "rich_planet_growth_bonus": 0.8
+          },
+          "prerequisites": ["biology.7"]
+        }
+      ]
+    },
+    "construction": {
+      "display_name": "Construction",
+      "focus": "Factories, buildings, and industrial output",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Automated Factories",
+          "description": "Basic automation increases output from every factory.",
+          "base_research_cost": 75,
+          "effects": {
+            "factory_output_multiplier": 1.20
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Improved Robotics I",
+          "description": "Population can operate more factories efficiently.",
+          "base_research_cost": 135,
+          "effects": {
+            "factories_per_pop": 3
+          },
+          "prerequisites": ["construction.1"]
+        },
+        {
+          "level": 3,
+          "name": "Mega-Factories",
+          "description": "Larger, more efficient factory complexes.",
+          "base_research_cost": 210,
+          "effects": {
+            "factory_output_multiplier": 1.30
+          },
+          "prerequisites": ["construction.2"]
+        },
+        {
+          "level": 4,
+          "name": "Deep Core Mining",
+          "description": "Rich and Ultra-Rich planets gain significant production bonuses.",
+          "base_research_cost": 320,
+          "effects": {
+            "rich_production_bonus": 0.25,
+            "ultra_rich_production_bonus": 0.50
+          },
+          "prerequisites": ["construction.3"]
+        },
+        {
+          "level": 5,
+          "name": "Improved Robotics II",
+          "description": "Further increases the number of factories each citizen can operate.",
+          "base_research_cost": 490,
+          "effects": {
+            "factories_per_pop": 4
+          },
+          "prerequisites": ["construction.2", "construction.4"]
+        },
+        {
+          "level": 6,
+          "name": "Orbital Construction Yards",
+          "description": "Enables construction of larger ship hulls and faster ship building.",
+          "base_research_cost": 720,
+          "effects": {
+            "unlocks_large_hulls": true,
+            "ship_build_speed": 1.25
+          },
+          "prerequisites": ["construction.5"]
+        },
+        {
+          "level": 7,
+          "name": "Nano-Construction",
+          "description": "Dramatically increases factory efficiency and reduces build costs.",
+          "base_research_cost": 1080,
+          "effects": {
+            "factory_output_multiplier": 1.50,
+            "build_cost_reduction": 0.30
+          },
+          "prerequisites": ["construction.6"]
+        },
+        {
+          "level": 8,
+          "name": "Universal Constructor",
+          "description": "Peak robotics. Population operates 5 factories each with auto-repairing buildings.",
+          "base_research_cost": 1600,
+          "effects": {
+            "factories_per_pop": 5,
+            "auto_repair_buildings": true
+          },
+          "prerequisites": ["construction.7"]
+        }
+      ]
+    },
+    "computers": {
+      "display_name": "Computers",
+      "focus": "Research, automation, and AI",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Basic AI",
+          "description": "Early computer systems improve research output.",
+          "base_research_cost": 70,
+          "effects": {
+            "research_multiplier": 1.10
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Targeting Computers",
+          "description": "Improves accuracy of beam weapons in combat.",
+          "base_research_cost": 125,
+          "effects": {
+            "beam_accuracy_bonus": 0.15
+          },
+          "prerequisites": ["computers.1"]
+        },
+        {
+          "level": 3,
+          "name": "Combat Computers",
+          "description": "General combat bonuses for all ships.",
+          "base_research_cost": 195,
+          "effects": {
+            "ship_combat_bonus": 0.10
+          },
+          "prerequisites": ["computers.2"]
+        },
+        {
+          "level": 4,
+          "name": "Multi-Tasking AI",
+          "description": "AI assists in factory management.",
+          "base_research_cost": 310,
+          "effects": {
+            "factories_per_pop_bonus": 0.5
+          },
+          "prerequisites": ["computers.3"]
+        },
+        {
+          "level": 5,
+          "name": "Sentient AI",
+          "description": "Unlocks Android Workers — population that does not require food.",
+          "base_research_cost": 470,
+          "effects": {
+            "unlocks_android_workers": true
+          },
+          "prerequisites": ["computers.4", "biology.3"]
+        },
+        {
+          "level": 6,
+          "name": "Neural Networks",
+          "description": "Empire-wide research acceleration.",
+          "base_research_cost": 710,
+          "effects": {
+            "research_multiplier": 1.25
+          },
+          "prerequisites": ["computers.5"]
+        },
+        {
+          "level": 7,
+          "name": "Quantum Computing",
+          "description": "Significant boost to all industrial output.",
+          "base_research_cost": 1050,
+          "effects": {
+            "production_multiplier": 1.15
+          },
+          "prerequisites": ["computers.6"]
+        },
+        {
+          "level": 8,
+          "name": "Godlike AI",
+          "description": "Immense bonuses across the board, with risk of AI rebellion.",
+          "base_research_cost": 1550,
+          "effects": {
+            "all_multipliers": 1.30,
+            "ai_rebellion_risk": true
+          },
+          "prerequisites": ["computers.7"]
+        }
+      ]
+    },
+    "energy": {
+      "display_name": "Energy",
+      "focus": "Power generation, shields, and energy weapons",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Nuclear Fusion",
+          "description": "Improved planetary power plants increase production.",
+          "base_research_cost": 85,
+          "effects": {
+            "production_multiplier": 1.10
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Laser Weapons",
+          "description": "Unlocks basic laser batteries for ships.",
+          "base_research_cost": 150,
+          "effects": {
+            "unlocks_weapon": "Laser Battery"
+          },
+          "prerequisites": ["energy.1"]
+        },
+        {
+          "level": 3,
+          "name": "Shields I",
+          "description": "Basic deflector shields become available.",
+          "base_research_cost": 240,
+          "effects": {
+            "unlocks_shield": "Deflector Shield"
+          },
+          "prerequisites": ["energy.2"]
+        },
+        {
+          "level": 4,
+          "name": "Plasma Weapons",
+          "description": "Powerful mid-game energy weapons.",
+          "base_research_cost": 370,
+          "effects": {
+            "unlocks_weapon": "Plasma Cannon"
+          },
+          "prerequisites": ["energy.3"]
+        },
+        {
+          "level": 5,
+          "name": "Fusion Beams + Shields II",
+          "description": "Advanced shields and powerful beam weapons.",
+          "base_research_cost": 560,
+          "effects": {
+            "unlocks_shield": "Improved Deflector",
+            "unlocks_weapon": "Fusion Beam"
+          },
+          "prerequisites": ["energy.4"]
+        },
+        {
+          "level": 6,
+          "name": "Antimatter Reactors",
+          "description": "Huge power generation for ships and planets.",
+          "base_research_cost": 840,
+          "effects": {
+            "ship_power_bonus": 0.4,
+            "production_multiplier": 1.12
+          },
+          "prerequisites": ["energy.5"]
+        },
+        {
+          "level": 7,
+          "name": "Phasors",
+          "description": "Extremely powerful directed energy weapons.",
+          "base_research_cost": 1250,
+          "effects": {
+            "unlocks_weapon": "Phasor"
+          },
+          "prerequisites": ["energy.6"]
+        },
+        {
+          "level": 8,
+          "name": "Omega Weapons",
+          "description": "Ultimate energy weapons capable of terrifying destruction.",
+          "base_research_cost": 1850,
+          "effects": {
+            "unlocks_weapon": "Omega Beam"
+          },
+          "prerequisites": ["energy.7"]
+        }
+      ]
+    },
+    "propulsion": {
+      "display_name": "Propulsion",
+      "focus": "Engines, range, and strategic movement",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Ion Engines",
+          "description": "Improved ship speed.",
+          "base_research_cost": 65,
+          "effects": {
+            "ship_speed_multiplier": 1.25
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Hyperdrive I",
+          "description": "Increases maximum jump range.",
+          "base_research_cost": 115,
+          "effects": {
+            "ship_range_bonus": 25
+          },
+          "prerequisites": ["propulsion.1"]
+        },
+        {
+          "level": 3,
+          "name": "Inertial Stabilizers",
+          "description": "Better ship maneuverability in combat.",
+          "base_research_cost": 180,
+          "effects": {
+            "combat_maneuver_bonus": 0.15
+          },
+          "prerequisites": ["propulsion.2"]
+        },
+        {
+          "level": 4,
+          "name": "Hyperdrive II",
+          "description": "Further range improvements + basic sensors.",
+          "base_research_cost": 280,
+          "effects": {
+            "ship_range_bonus": 45
+          },
+          "prerequisites": ["propulsion.2"]
+        },
+        {
+          "level": 5,
+          "name": "Warp Drive",
+          "description": "Very high speed engines.",
+          "base_research_cost": 430,
+          "effects": {
+            "ship_speed_multiplier": 1.8
+          },
+          "prerequisites": ["propulsion.4"]
+        },
+        {
+          "level": 6,
+          "name": "Mass Drivers",
+          "description": "Enables cheap planetary bombardment.",
+          "base_research_cost": 650,
+          "effects": {
+            "unlocks_bombardment": "Mass Driver"
+          },
+          "prerequisites": ["propulsion.5"]
+        },
+        {
+          "level": 7,
+          "name": "Intergalactic Drive",
+          "description": "Extremely long range travel.",
+          "base_research_cost": 980,
+          "effects": {
+            "ship_range_multiplier": 2.5
+          },
+          "prerequisites": ["propulsion.6"]
+        },
+        {
+          "level": 8,
+          "name": "Jump Gates",
+          "description": "Strategic movement network across the galaxy.",
+          "base_research_cost": 1450,
+          "effects": {
+            "unlocks_jump_gates": true
+          },
+          "prerequisites": ["propulsion.7"]
+        }
+      ]
+    },
+    "physics": {
+      "display_name": "Physics",
+      "focus": "Advanced and exotic weapons",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Particle Beams",
+          "description": "Early advanced beam weapons.",
+          "base_research_cost": 90,
+          "effects": {
+            "unlocks_weapon": "Particle Beam"
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Nuclear Missiles",
+          "description": "First generation ship-to-ship missiles.",
+          "base_research_cost": 160,
+          "effects": {
+            "unlocks_weapon": "Nuclear Missile"
+          },
+          "prerequisites": ["physics.1"]
+        },
+        {
+          "level": 3,
+          "name": "Graviton Technology",
+          "description": "Gravity manipulation for weapons and utility.",
+          "base_research_cost": 250,
+          "effects": {
+            "unlocks_weapon": "Graviton Beam"
+          },
+          "prerequisites": ["physics.2"]
+        },
+        {
+          "level": 4,
+          "name": "Antimatter Missiles",
+          "description": "Extremely powerful missile technology.",
+          "base_research_cost": 390,
+          "effects": {
+            "unlocks_weapon": "Antimatter Missile"
+          },
+          "prerequisites": ["physics.3"]
+        },
+        {
+          "level": 5,
+          "name": "Tachyon Weapons",
+          "description": "Fast, hard-hitting beam weapons.",
+          "base_research_cost": 590,
+          "effects": {
+            "unlocks_weapon": "Tachyon Beam"
+          },
+          "prerequisites": ["physics.4"]
+        },
+        {
+          "level": 6,
+          "name": "Plasma Torpedoes",
+          "description": "Slow but devastating area-effect torpedoes.",
+          "base_research_cost": 880,
+          "effects": {
+            "unlocks_weapon": "Plasma Torpedo"
+          },
+          "prerequisites": ["physics.5"]
+        },
+        {
+          "level": 7,
+          "name": "Stellar Conversion",
+          "description": "Terrifying late-game planet-killing technology.",
+          "base_research_cost": 1300,
+          "effects": {
+            "unlocks_terror_weapon": "Stellar Converter"
+          },
+          "prerequisites": ["physics.6"]
+        },
+        {
+          "level": 8,
+          "name": "Singularity Weapons",
+          "description": "Ultimate doomsday devices.",
+          "base_research_cost": 1900,
+          "effects": {
+            "unlocks_terror_weapon": "Singularity Generator"
+          },
+          "prerequisites": ["physics.7"]
+        }
+      ]
+    },
+    "ecology": {
+      "display_name": "Ecology",
+      "focus": "Environment, pollution, and terraforming",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Pollution Control",
+          "description": "Significantly reduces pollution generated by industry.",
+          "base_research_cost": 60,
+          "effects": {
+            "pollution_multiplier": 0.5
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Atmospheric Terraforming",
+          "description": "Increases maximum population on many planet types.",
+          "base_research_cost": 110,
+          "effects": {
+            "max_pop_multiplier": 1.25
+          },
+          "prerequisites": ["ecology.1"]
+        },
+        {
+          "level": 3,
+          "name": "Soil Enrichment",
+          "description": "Boosts food production and growth on marginal worlds.",
+          "base_research_cost": 175,
+          "effects": {
+            "food_multiplier": 1.20,
+            "growth_multiplier": 1.15
+          },
+          "prerequisites": ["ecology.2"]
+        },
+        {
+          "level": 4,
+          "name": "Advanced Terraforming",
+          "description": "Can turn many barren planets into habitable ones.",
+          "base_research_cost": 270,
+          "effects": {
+            "terraform_barren": true
+          },
+          "prerequisites": ["ecology.3"]
+        },
+        {
+          "level": 5,
+          "name": "Gaia Transformation",
+          "description": "Can transform suitable planets into rich Gaia worlds.",
+          "base_research_cost": 410,
+          "effects": {
+            "unlocks_gaia_terraforming": true
+          },
+          "prerequisites": ["ecology.4"]
+        },
+        {
+          "level": 6,
+          "name": "Weather Control",
+          "description": "Stabilizes planetary environments.",
+          "base_research_cost": 620,
+          "effects": {
+            "growth_stability_bonus": 0.2
+          },
+          "prerequisites": ["ecology.5"]
+        },
+        {
+          "level": 7,
+          "name": "Eco-Restoration",
+          "description": "Can permanently remove heavy pollution from planets.",
+          "base_research_cost": 930,
+          "effects": {
+            "pollution_removal": true
+          },
+          "prerequisites": ["ecology.6"]
+        },
+        {
+          "level": 8,
+          "name": "Planetary Engineering",
+          "description": "Massive increases to maximum population on all worlds.",
+          "base_research_cost": 1400,
+          "effects": {
+            "max_pop_multiplier": 1.6
+          },
+          "prerequisites": ["ecology.7"]
+        }
+      ]
+    },
+    "sociology": {
+      "display_name": "Sociology",
+      "focus": "Government, happiness, espionage, and diplomacy",
+      "levels": [
+        {
+          "level": 1,
+          "name": "Improved Government",
+          "description": "Better administration increases planetary happiness.",
+          "base_research_cost": 55,
+          "effects": {
+            "happiness_bonus": 0.15
+          },
+          "prerequisites": []
+        },
+        {
+          "level": 2,
+          "name": "Espionage Networks",
+          "description": "Unlocks basic spying and counter-espionage.",
+          "base_research_cost": 100,
+          "effects": {
+            "unlocks_espionage": true
+          },
+          "prerequisites": ["sociology.1"]
+        },
+        {
+          "level": 3,
+          "name": "Propaganda",
+          "description": "Reduces unhappiness caused by crowding and pollution.",
+          "base_research_cost": 160,
+          "effects": {
+            "crowding_happiness_penalty_reduction": 0.4
+          },
+          "prerequisites": ["sociology.2"]
+        },
+        {
+          "level": 4,
+          "name": "Cultural Exchange",
+          "description": "Improves diplomatic relations with other races.",
+          "base_research_cost": 250,
+          "effects": {
+            "diplomacy_bonus": 0.3
+          },
+          "prerequisites": ["sociology.3"]
+        },
+        {
+          "level": 5,
+          "name": "Mind Control",
+          "description": "Allows peaceful capture of enemy colonies in some cases.",
+          "base_research_cost": 380,
+          "effects": {
+            "unlocks_mind_control": true
+          },
+          "prerequisites": ["sociology.4"]
+        },
+        {
+          "level": 6,
+          "name": "Universal Translator",
+          "description": "Major diplomatic bonuses and reduced misunderstandings.",
+          "base_research_cost": 570,
+          "effects": {
+            "diplomacy_bonus": 0.6
+          },
+          "prerequisites": ["sociology.5"]
+        },
+        {
+          "level": 7,
+          "name": "Galactic Unity",
+          "description": "Empire-wide happiness and shared research benefits.",
+          "base_research_cost": 850,
+          "effects": {
+            "happiness_bonus": 0.35,
+            "research_sharing": true
+          },
+          "prerequisites": ["sociology.6"]
+        },
+        {
+          "level": 8,
+          "name": "Transcendence",
+          "description": "Ultimate victory condition and enormous empire bonuses.",
+          "base_research_cost": 1250,
+          "effects": {
+            "transcendence_victory": true,
+            "all_bonuses": 0.5
+          },
+          "prerequisites": ["sociology.7", "biology.8"]
+        }
+      ]
+    }
+  }
+}

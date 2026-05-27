@@ -63,6 +63,59 @@ bool gShowTurnReport = false;
 static bool gShowColonyBuildingsWindow = false;
 static int gSelectedColonyForBuildings = -1;
 
+// === Animated Astronomical Background ===
+struct BackgroundStar {
+    float x, y;           // screen-space base position (we'll apply camera offset lightly)
+    float size;
+    float twinkleSpeed;
+    float phase;
+    Color baseColor;
+};
+
+struct ShootingStar {
+    float x, y;
+    float vx, vy;
+    float life;
+    float maxLife;
+    Color color;
+};
+
+static std::vector<BackgroundStar> gBackgroundStars;
+static std::vector<ShootingStar> gActiveShootingStars;
+
+static void InitAstronomicalBackground() {
+    if (!gBackgroundStars.empty()) return; // already initialized
+
+    gBackgroundStars.reserve(420);
+
+    // Create a nice mix of star colors and sizes
+    for (int i = 0; i < 420; ++i) {
+        BackgroundStar s;
+        s.x = (float)(rand() % 2000) - 200.0f;   // generous range
+        s.y = (float)(rand() % 1400) - 150.0f;
+
+        // Most stars are small and faint
+        float r = (float)rand() / RAND_MAX;
+        if (r < 0.65f) {
+            s.size = 1.1f + ((float)rand() / RAND_MAX) * 0.9f;
+            s.baseColor = { 220, 230, 255, 255 };           // cool white-blue
+        } else if (r < 0.88f) {
+            s.size = 1.4f + ((float)rand() / RAND_MAX) * 1.1f;
+            s.baseColor = { 255, 245, 220, 255 };           // warm white-yellow
+        } else {
+            s.size = 1.8f + ((float)rand() / RAND_MAX) * 1.4f;
+            s.baseColor = { 180, 210, 255, 255 };           // bluish giant
+        }
+
+        s.twinkleSpeed = 0.8f + ((float)rand() / RAND_MAX) * 2.2f;
+        s.phase = ((float)rand() / RAND_MAX) * 6.28f;
+
+        gBackgroundStars.push_back(s);
+    }
+
+    gActiveShootingStars.reserve(4);
+}
+
 // === Phase 3 Sounds ===
 static Sound sfxClick;
 static Sound sfxEndTurn;
@@ -208,6 +261,99 @@ static void DrawStarVaried(float x, float y, float zoom, bool owned, bool select
     // Subtle ownership indicator ring for owned systems
     if (owned && !selected) {
         DrawCircleLines(x, y, 11.5f * zoom, Color{255, 220, 120, 90});
+    }
+}
+
+// === Animated deep space background ===
+static void DrawAstronomicalBackground(int screenW, int screenH, bool inSystemView) {
+    // Very dark space background
+    ClearBackground(Color{4, 5, 14, 255});
+
+    float time = static_cast<float>(GetTime());
+
+    // === Twinkling background stars ===
+    float parallax = inSystemView ? 0.08f : 0.35f; // less movement in system view
+
+    for (const auto& star : gBackgroundStars) {
+        float bx = star.x + gCameraOffset.x * parallax;
+        float by = star.y + gCameraOffset.y * parallax;
+
+        // Wrap around screen edges for infinite feel
+        bx = fmodf(bx, (float)screenW + 400.0f);
+        by = fmodf(by, (float)screenH + 300.0f);
+        if (bx < -200) bx += screenW + 400.0f;
+        if (by < -150) by += screenH + 300.0f;
+
+        // Twinkle
+        float brightness = 0.55f + 0.45f * sinf(time * star.twinkleSpeed + star.phase);
+        if (brightness < 0.15f) brightness = 0.15f;
+
+        unsigned char alpha = (unsigned char)(brightness * 255.0f);
+        Color c = star.baseColor;
+        c.a = alpha;
+
+        float sz = star.size * (inSystemView ? 0.7f : 1.0f);
+
+        if (sz > 1.6f) {
+            // Bigger stars get a tiny soft glow
+            Color glow = { c.r, c.g, c.b, (unsigned char)(alpha * 0.25f) };
+            DrawCircleV({bx, by}, sz * 1.8f, glow);
+        }
+
+        DrawCircleV({bx, by}, sz, c);
+    }
+
+    // === Very faint slow-pulsing nebulae (adds nice atmosphere) ===
+    if (!inSystemView) {
+        // Only in galaxy view for now
+        float n1 = 0.08f + 0.03f * sinf(time * 0.07f);
+        float n2 = 0.06f + 0.025f * sinf(time * 0.11f + 1.7f);
+
+        DrawCircleV({screenW * 0.18f, screenH * 0.35f}, 180.0f, Color{80, 60, 140, (unsigned char)(n1 * 255)});
+        DrawCircleV({screenW * 0.78f, screenH * 0.72f}, 140.0f, Color{60, 90, 130, (unsigned char)(n2 * 255)});
+    }
+
+    // === Occasional shooting stars ===
+    // Spawn new ones rarely
+    if ((rand() % 180) == 0 && gActiveShootingStars.size() < 3) {
+        ShootingStar ss;
+        ss.x = (float)(rand() % screenW);
+        ss.y = (float)(rand() % (screenH / 2));
+        float speed = 380.0f + (rand() % 220);
+        float angle = -0.35f + ((rand() % 100) / 100.0f) * 0.7f; // mostly left to right downward
+        ss.vx = cosf(angle) * speed;
+        ss.vy = sinf(angle) * speed;
+        ss.maxLife = 0.45f + ((rand() % 100) / 100.0f) * 0.35f;
+        ss.life = ss.maxLife;
+        ss.color = {220, 235, 255, 230};
+        gActiveShootingStars.push_back(ss);
+    }
+
+    // Update and draw active shooting stars
+    for (size_t i = 0; i < gActiveShootingStars.size(); ) {
+        auto& ss = gActiveShootingStars[i];
+        ss.x += ss.vx * GetFrameTime();
+        ss.y += ss.vy * GetFrameTime();
+        ss.life -= GetFrameTime();
+
+        if (ss.life <= 0.0f) {
+            gActiveShootingStars.erase(gActiveShootingStars.begin() + i);
+            continue;
+        }
+
+        float t = ss.life / ss.maxLife;
+        unsigned char a = (unsigned char)(t * 230.0f);
+
+        // Draw the streak
+        Vector2 start = {ss.x, ss.y};
+        Vector2 end = {ss.x - ss.vx * 0.018f, ss.y - ss.vy * 0.018f};
+
+        DrawLineEx(start, end, 1.6f, Color{ss.color.r, ss.color.g, ss.color.b, a});
+
+        // Bright head
+        DrawCircleV(start, 1.8f, Color{255, 255, 255, (unsigned char)(a * 0.9f)});
+
+        ++i;
     }
 }
 
@@ -481,7 +627,7 @@ static bool DrawRaceSelectionWindow() {
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground);
 
-    if (gFontTitle) ImGui::PushFont(gFontTitle, gFontTitle->LegacySize);
+    if (gFontTitle) ImGui::PushFont(gFontTitle, 24.0f);   // loaded larger for better spacing
     ImGui::TextColored(ImVec4(0.88f, 0.92f, 1.0f, 1.0f), "ORION REBORN");
     if (gFontTitle) ImGui::PopFont();
 
@@ -526,7 +672,7 @@ static bool DrawRaceSelectionWindow() {
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
 
-        if (gFontTitle) ImGui::PushFont(gFontTitle, gFontTitle->LegacySize);
+        if (gFontTitle) ImGui::PushFont(gFontTitle, 22.0f);   // render 26pt font smaller → more character spacing
         ImGui::TextColored(ImVec4(r.accent.r / 255.0f, r.accent.g / 255.0f, r.accent.b / 255.0f, 1.0f), "%s", r.name.c_str());
         if (gFontTitle) ImGui::PopFont();
 
@@ -585,6 +731,8 @@ int main(int argc, char** argv) {
     InitWindow(screenWidth, screenHeight, "Orion Reborn - Master of Orion (Phase 2)");
     SetTargetFPS(120);
     InitAudioDevice();           // Phase 3 - sounds
+
+    InitAstronomicalBackground(); // nice twinkling stars + occasional shooting stars
 
     // Generate simple procedural sound effects (no external files needed) - improved variety for retro 4X feel
     auto GenWaveSine = [](float frequency, float duration, int sampleRate) -> Wave {
@@ -705,14 +853,20 @@ int main(int argc, char** argv) {
         std::string loadedFullPath;
         bool found = false;
 
-        // Simple font loading - no fancy rasterization tweaks.
-        // We just load a TTF if present in assets/fonts/, otherwise fall back to default.
+        // Font loading.
+        // We intentionally load the font at a slightly larger size than we render it.
+        // This gives more breathing room between characters and improves readability.
+        // You can tune the "rendered size" in the PushFont calls below if you want
+        // even more or less spacing.
         for (const auto& dir : searchDirs) {
             for (int n = 0; fontNames[n] != nullptr; ++n) {
                 std::string fullPath = dir + fontNames[n];
                 if (FileExists(fullPath.c_str())) {
-                    gFontMain  = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 16.0f);
-                    gFontTitle = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 24.0f);
+                    // Load at a larger physical size than we will display.
+                    // The extra "virtual" space between glyphs improves readability.
+                    gFontMain  = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 18.0f);
+                    gFontTitle = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 26.0f);
+
                     loadedFullPath = fullPath;
                     found = true;
                     break;
@@ -728,6 +882,12 @@ int main(int argc, char** argv) {
             gFontTitle = gFontMain;
             TraceLog(LOG_INFO, "Using default ImGui font (no .ttf in assets/fonts/)");
         }
+
+        // Make the loaded (slightly larger) font the default so most UI text benefits
+        // from the extra breathing room between characters.
+        if (gFontMain) {
+            io.FontDefault = gFontMain;
+        }
     }
 
     // Main game loop
@@ -735,7 +895,7 @@ int main(int argc, char** argv) {
         // === Race Selection Menu (Phase 2) ===
         if (gInRaceSelection) {
             BeginDrawing();
-            ClearBackground(Color{6, 8, 18, 255});
+            DrawAstronomicalBackground(GetScreenWidth(), GetScreenHeight(), false);
 
             rlImGuiBegin();
 
@@ -751,7 +911,7 @@ int main(int argc, char** argv) {
                 // This prevents the previous race UI draw data from lingering
                 // visually when the normal (mostly commented) game loop takes over.
                 BeginDrawing();
-                ClearBackground(Color{6, 8, 18, 255});
+                DrawAstronomicalBackground(GetScreenWidth(), GetScreenHeight(), false);
                 rlImGuiBegin();
                 // Submit an empty ImGui frame
                 rlImGuiEnd();
@@ -1053,43 +1213,10 @@ int main(int argc, char** argv) {
                         gShowColonyWindow = (gSelectedColonyIndex >= 0);
                         gSelectedColonyForBuildings = gSelectedColonyIndex;
                         gShowColonyBuildingsWindow = (gSelectedColonyForBuildings >= 0);
-                    } else if (!clickedPl.isColonized()) {
-                        // Offer to colonize if we have a colony ship in this system
-                        bool hasColonyShipHere = false;
-                        for (const auto& sh : gGameState.ships) {
-                            if (sh.locationSystemId == viewedSys->starId && sh.type == orion::ShipType::ColonyShip && sh.ownerId == 0) {
-                                hasColonyShipHere = true;
-                                break;
-                            }
-                        }
-                        if (hasColonyShipHere) {
-                            // For simplicity, trigger colonization action on the first valid planet
-                            // In a full version we'd select the specific planet
-                            for (auto& p : viewedSys->planets) {
-                                if (!p.isColonized() && p.canBeColonized()) {
-                                    // Perform colonization using first available colony ship
-                                    for (size_t s = 0; s < gGameState.ships.size(); ++s) {
-                                        auto& sh = gGameState.ships[s];
-                                        if (sh.locationSystemId == viewedSys->starId && sh.type == orion::ShipType::ColonyShip && sh.ownerId == 0) {
-                                            p.ownerEmpireId = 0;
-                                            p.population = 1.2f;
-                                            viewedSys->ownerEmpireId = 0;
-
-                                            orion::Colony newCol{};
-                                            newCol.ownerId = 0;
-                                            newCol.population = 1.2f;
-                                            newCol.planetId = viewedSys->starId;
-                                            gGameState.colonies.push_back(newCol);
-
-                                            gGameState.ships.erase(gGameState.ships.begin() + s);
-                                            gSelectedPlanetIndex = clickedIndex; // keep selection
-                                            break;
-                                        }
-                                    }
-                                    break;
-                                }
-                            }
-                        }
+                    } else if (!clickedPl.isColonized() && clickedPl.canBeColonized()) {
+                        // Just select the planet. Colonization now requires explicit confirmation
+                        // via the Star System Menu (no automatic colonization on click).
+                        gSelectedPlanetIndex = clickedIndex;
                     }
                 } else {
                     // Clicked empty space in system view - deselect planet
@@ -1156,7 +1283,7 @@ int main(int argc, char** argv) {
 
         // === Drawing ===
         BeginDrawing();
-        ClearBackground(Color{6, 8, 18, 255});
+        DrawAstronomicalBackground(screenW, screenH, gInSystemView);
 
         if (gInSystemView) {
             // ==================== STAR SYSTEM VIEW (raylib part only) ====================
@@ -1645,7 +1772,10 @@ int main(int argc, char** argv) {
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.42f, 0.70f, 1.0f, 1.0f), "RP:%d", plr.researchPool);
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.35f, 1.0f), "Colonies:%zu", gGameState.colonies.size());
+        // Only show player's colonies in the top bar
+        size_t playerColCount = 0;
+        for (const auto& c : gGameState.colonies) if (c.ownerId == 0) ++playerColCount;
+        ImGui::TextColored(ImVec4(1.0f, 0.78f, 0.35f, 1.0f), "Colonies:%zu", playerColCount);
 
         ImGui::SameLine(ImGui::GetWindowWidth() - 180);
         if (ImGui::Button("End Turn")) {
@@ -2072,13 +2202,120 @@ int main(int argc, char** argv) {
 //                 }
 
 //                 ImGui::Separator();
-//                 if (ImGui::Button("Return to Galaxy Map", ImVec2(-1, 0))) {
-//                     gInSystemView = false;
-//                     gSelectedPlanetIndex = -1;
-//                 }
-//                 ImGui::End();
-//             }
-//         }
+        // ==================== Star System Menu (when inside a system) ====================
+        if (gInSystemView) {
+            auto* viewedSys = gGameState.galaxy.findSystemById(gViewedSystemId);
+            if (viewedSys) {
+                ImGui::SetNextWindowPos(ImVec2(30, 40), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSize(ImVec2(360, 420), ImGuiCond_FirstUseEver);
+                ImGui::Begin("Star System", nullptr, ImGuiWindowFlags_NoCollapse);
+
+                ImGui::TextColored(ImVec4(0.75f, 0.85f, 1.0f, 1.0f), "%s System", viewedSys->name.c_str());
+                ImGui::Text("%zu planets  •  Owner: %s",
+                           viewedSys->planets.size(),
+                           (viewedSys->ownerEmpireId == 0) ? "You" : "Unclaimed / Other");
+
+                ImGui::Separator();
+
+                ImGui::Text("Planets:");
+                for (size_t i = 0; i < viewedSys->planets.size(); ++i) {
+                    const auto& pl = viewedSys->planets[i];
+                    ImGui::PushID((int)i);
+
+                    bool isSelected = ((int)i == gSelectedPlanetIndex);
+                    if (isSelected) {
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.9f, 1.0f, 1.0f));
+                    }
+
+                    std::string label = pl.name + "  (" + std::string(to_string(pl.size)) + " " + std::string(to_string(pl.type)) + ")";
+                    if (ImGui::Selectable(label.c_str(), isSelected)) {
+                        gSelectedPlanetIndex = (int)i;
+                    }
+
+                    if (isSelected) {
+                        ImGui::PopStyleColor();
+                    }
+
+                    if (pl.isColonized()) {
+                        ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.5f, 1.0f), "   Colonized (Pop: %.1f)", pl.population);
+                    } else if (pl.canBeColonized()) {
+                        ImGui::TextDisabled("   Uncolonized - send a colony ship");
+                    } else {
+                        ImGui::TextDisabled("   Hostile environment");
+                    }
+
+                    ImGui::PopID();
+                }
+
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                // === Colonization Menu (explicit confirmation only) ===
+                bool hasColonyShip = false;
+                for (const auto& sh : gGameState.ships) {
+                    if (sh.ownerId == 0 && sh.locationSystemId == gViewedSystemId && sh.type == orion::ShipType::ColonyShip) {
+                        hasColonyShip = true;
+                        break;
+                    }
+                }
+
+                std::vector<int> colonizableIndices;
+                for (size_t i = 0; i < viewedSys->planets.size(); ++i) {
+                    const auto& pl = viewedSys->planets[i];
+                    if (!pl.isColonized() && pl.canBeColonized()) {
+                        colonizableIndices.push_back((int)i);
+                    }
+                }
+
+                if (hasColonyShip && !colonizableIndices.empty()) {
+                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(0.5f, 0.95f, 0.6f, 1.0f), "Colonization Opportunities");
+                    ImGui::TextDisabled("Select a planet and confirm to colonize (consumes 1 colony ship).");
+
+                    for (int idx : colonizableIndices) {
+                        const auto& pl = viewedSys->planets[idx];
+                        ImGui::PushID(idx);
+
+                        if (ImGui::Button(("Colonize " + pl.name).c_str(), ImVec2(-1, 0))) {
+                            // Perform colonization immediately on confirmation
+                            for (size_t s = 0; s < gGameState.ships.size(); ++s) {
+                                auto& sh = gGameState.ships[s];
+                                if (sh.locationSystemId == gViewedSystemId && sh.type == orion::ShipType::ColonyShip && sh.ownerId == 0) {
+                                    auto& targetPlanet = viewedSys->planets[idx];
+                                    targetPlanet.ownerEmpireId = 0;
+                                    targetPlanet.population = 1.2f;
+                                    viewedSys->ownerEmpireId = 0;
+
+                                    orion::Colony newCol{};
+                                    newCol.ownerId = 0;
+                                    newCol.population = 1.2f;
+                                    newCol.planetId = gViewedSystemId;
+                                    newCol.maxPopulation = static_cast<float>(targetPlanet.maxPopulation);
+                                    gGameState.colonies.push_back(newCol);
+
+                                    gGameState.ships.erase(gGameState.ships.begin() + s);
+                                    PlaySound(sfxColonize);
+
+                                    gTurnReportMessages.push_back("Colonized " + targetPlanet.name + "!");
+                                    break;
+                                }
+                            }
+                        }
+                        ImGui::PopID();
+                    }
+                }
+
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                if (ImGui::Button("Return to Galaxy Map", ImVec2(-1, 0))) {
+                    gInSystemView = false;
+                    gSelectedPlanetIndex = -1;
+                }
+
+                ImGui::End();
+            }
+        }
 
         // Right empire panel (restored)
         if (gShowDebugPanel) {
@@ -2091,7 +2328,11 @@ int main(int argc, char** argv) {
             ImGui::Separator();
             ImGui::Text("Treasury: %d BC", _plr.treasury);
             ImGui::Text("Research: %d RP", _plr.researchPool);
-            ImGui::Text("Owned Colonies: %zu", gGameState.colonies.size());
+            // Count only the player's own colonies
+            size_t playerColonyCount = 0;
+            for (const auto& c : gGameState.colonies)
+                if (c.ownerId == 0) ++playerColonyCount;
+            ImGui::Text("Your Colonies: %zu", playerColonyCount);
             ImGui::Text("Current Turn: %d", gGameState.currentTurn);
             ImGui::Separator();
 
@@ -2219,55 +2460,8 @@ int main(int argc, char** argv) {
 // // //             ImGui::End();
 // // //         }
 
-// Extracted so the real UI and the ImGui input simulation harness in tests
-// can both drive the exact same window code.
-void DrawEndOfTurnReportWindow() {
-    if (!gShowTurnReport) return;
-
-    float reportWidth = 620.0f;
-    float reportHeight = 420.0f;
-
-    ImGui::SetNextWindowPos(ImVec2(GetScreenWidth() * 0.5f - reportWidth * 0.5f,
-                                   GetScreenHeight() * 0.25f), ImGuiCond_Appearing);
-    ImGui::SetNextWindowSize(ImVec2(reportWidth, reportHeight), ImGuiCond_Appearing);
-
-    ImGui::Begin("End of Turn Report", &gShowTurnReport,
-                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
-
-    // Note: We intentionally do NOT call SetNextWindowFocus() every frame.
-    // Doing so interferes with the user's ability to click the Close button
-    // or interact with the window normally.
-
-    ImGui::TextColored(ImVec4(0.9f, 0.92f, 1.0f, 1.0f), "Turn %d Report", gGameState.currentTurn);
-    ImGui::Separator();
-
-    // Summary
-    ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "Summary");
-    ImGui::BulletText("Treasury: %d BC", gGameState.playerEmpire().treasury);
-    ImGui::BulletText("Research: %d RP", gGameState.playerEmpire().researchPool);
-    ImGui::BulletText("Colonies: %zu", gGameState.colonies.size());
-
-    ImGui::Separator();
-
-    // What happened this turn
-    ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "What happened this turn");
-    if (gTurnReportMessages.empty()) {
-        ImGui::TextDisabled("No major events this turn.");
-    } else {
-        for (const auto& msg : gTurnReportMessages) {
-            ImGui::BulletText("%s", msg.c_str());
-        }
-    }
-
-    ImGui::Separator();
-    ImGui::Dummy(ImVec2(0, 8));
-
-    if (ImGui::Button("Close Report", ImVec2(-1, 36))) {
-        gShowTurnReport = false;
-    }
-
-    ImGui::End();
-}
+// Forward declaration (definition moved to file scope below to avoid scope issues)
+void DrawEndOfTurnReportWindow();
 
 // ==================== Phase 3: Leaders Window ====================
         // // if (gShowLeadersWindow) {
@@ -2550,6 +2744,53 @@ void DrawEndOfTurnReportWindow() {
     CloseWindow();
 
     return 0;
+}
+
+// =============================================================================
+// Extracted Turn Report drawing function (used by both game and test harness)
+// =============================================================================
+void DrawEndOfTurnReportWindow() {
+    if (!gShowTurnReport) return;
+
+    float reportWidth = 620.0f;
+    float reportHeight = 420.0f;
+
+    ImGui::SetNextWindowPos(ImVec2(GetScreenWidth() * 0.5f - reportWidth * 0.5f,
+                                   GetScreenHeight() * 0.25f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(reportWidth, reportHeight), ImGuiCond_Appearing);
+
+    ImGui::Begin("End of Turn Report", &gShowTurnReport,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+
+    ImGui::TextColored(ImVec4(0.9f, 0.92f, 1.0f, 1.0f), "Turn %d Report", gGameState.currentTurn);
+    ImGui::Separator();
+
+    // Summary
+    ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "Summary");
+    ImGui::BulletText("Treasury: %d BC", gGameState.playerEmpire().treasury);
+    ImGui::BulletText("Research: %d RP", gGameState.playerEmpire().researchPool);
+    ImGui::BulletText("Colonies: %zu", gGameState.colonies.size());
+
+    ImGui::Separator();
+
+    // What happened this turn
+    ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "What happened this turn");
+    if (gTurnReportMessages.empty()) {
+        ImGui::TextDisabled("No major events this turn.");
+    } else {
+        for (const auto& msg : gTurnReportMessages) {
+            ImGui::BulletText("%s", msg.c_str());
+        }
+    }
+
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0, 8));
+
+    if (ImGui::Button("Close Report", ImVec2(-1, 36))) {
+        gShowTurnReport = false;
+    }
+
+    ImGui::End();
 }
 
 

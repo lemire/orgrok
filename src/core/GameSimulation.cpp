@@ -4,6 +4,8 @@
 #include "core/GalaxyGeneration.hpp"
 #include "core/Technology.hpp"
 #include "core/Empire.hpp"
+#include "core/EconomyConfig.hpp"
+#include "core/TechTree.hpp"
 #include "entities/Ship.hpp"
 #include "entities/Colony.hpp"
 #include "entities/ShipDesign.hpp"
@@ -14,6 +16,7 @@
 #include <map>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 // Globals that initializeGame/processEndOfTurn depend on (provided by main.cpp at link time for the exe;
 // tests can define their own instances when exercising simulation functions).
@@ -22,6 +25,23 @@
 // Leader is now defined in GameSimulation.hpp so the type is complete for this TU.
 // gLeaders symbol is provided by main.cpp at link time.
 // (playerDesigns is visible because we #include "entities/ShipDesign.hpp" which provides the inline global inside namespace orion)
+
+// Loaded data-driven configuration (economy model + full tech tree)
+orion::EconomyConfig gEconomyConfig;
+orion::TechTree gTechTree;
+
+// Helper that returns the current effective factories per population
+// by summing relevant effects from the loaded TechTree.
+int getCurrentFactoriesPerPop() {
+    double fromTree = gTechTree.getTotalNumericEffect(
+        orion::TechTree::Category::Construction, "factories_per_pop");
+
+    // Fallback / base value if tree not loaded or no relevant techs yet
+    if (fromTree < 0.1) {
+        return gEconomyConfig.baseFactoriesPerPop;
+    }
+    return static_cast<int>(fromTree);
+}
 
 // Moved InitRandomEvents here (from main.cpp) as part of staged extraction.
 // This lets initializeGame() and future processEndOfTurn() work when linking only orion_core (for tests).
@@ -321,10 +341,65 @@ void resolveShipCombat() {
     }
 }
 
+// Helper to load data-driven configs with sensible fallback paths.
+// Looks for data/ next to the executable first, then a few common development paths.
+static void loadGameDataConfigs() {
+    std::vector<std::string> searchPaths = {
+        "data/economy.json",
+        "../data/economy.json",
+        "../../data/economy.json",
+        "orion-reborn/data/economy.json"
+    };
+
+    bool econLoaded = false;
+    for (const auto& path : searchPaths) {
+        if (std::filesystem::exists(path)) {
+            try {
+                gEconomyConfig = orion::EconomyConfig::load(path);
+                econLoaded = true;
+                std::cout << "Loaded economy config from: " << path << std::endl;
+                break;
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: Failed to load " << path << ": " << e.what() << std::endl;
+            }
+        }
+    }
+    if (!econLoaded) {
+        std::cout << "Warning: Using default economy parameters (no economy.json found)." << std::endl;
+    }
+
+    // Tech tree
+    std::vector<std::string> techPaths = {
+        "data/tech_tree.json",
+        "../data/tech_tree.json",
+        "../../data/tech_tree.json",
+        "orion-reborn/data/tech_tree.json"
+    };
+
+    bool techLoaded = false;
+    for (const auto& path : techPaths) {
+        if (std::filesystem::exists(path)) {
+            try {
+                gTechTree = orion::TechTree::load(path);
+                techLoaded = true;
+                std::cout << "Loaded tech tree from: " << path << std::endl;
+                break;
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: Failed to load " << path << ": " << e.what() << std::endl;
+            }
+        }
+    }
+    if (!techLoaded) {
+        std::cout << "Warning: Using legacy hardcoded tech tree (no tech_tree.json found)." << std::endl;
+    }
+}
+
 void resetGameToNewGame(const std::string& race) {
     gGameState = orion::GameState{};
     gTurnReportMessages.clear();
     gShowTurnReport = false;
+
+    loadGameDataConfigs();   // Load economy + tech tree data
 
     initializeGame(race);
 }
@@ -475,7 +550,20 @@ void initializeGame(const std::string& playerRace) {
     };
 
     // Spawn starting ships for all empires
-    spawnStartingShips(0, gGameState.selectedStarId); // Player
+    spawnStartingShips(0, gGameState.selectedStarId); // Player (2 Scouts + 1 Colony Ship)
+
+    // Give the player one extra colony ship at the start for expansion (user request)
+    {
+        orion::Ship extraColony;
+        extraColony.id = static_cast<int>(gGameState.ships.size());
+        extraColony.type = orion::ShipType::ColonyShip;
+        extraColony.ownerId = 0;
+        extraColony.locationSystemId = gGameState.selectedStarId;
+        extraColony.name = "Colony Ship #2";
+        extraColony.effectiveSpeed = 1.0f;
+        extraColony.maxRange = 90.0f;
+        gGameState.ships.push_back(extraColony);
+    }
 
     // Find AI1's capital
     for (const auto& sys : gGameState.galaxy.systems) {
@@ -541,11 +629,28 @@ void processEndOfTurn() {
                         }
 
                         col.recalculateOutputs(pl.size, pl.type, pl.richness, pl.traits,
-                                               static_cast<float>(pl.maxPopulation), techBonus, prodMod);
+                                               static_cast<float>(pl.maxPopulation), techBonus, prodMod,
+                                               gEconomyConfig.workerOutput,           // base pop industry
+                                               0.22f,                                 // maintenance
+                                               gEconomyConfig.basePollutionPerFactory); // pollution rate from config
 
-                        // Apply results to empire (now using the already-modded netProduction from the formula)
-                        player.treasury += static_cast<int>(col.netProduction * 0.85f + 7);
-                        player.researchPool += static_cast<int>(col.researchOutput * 0.75f + 4);
+                        // Apply robotics limit from the loaded TechTree (factories per pop)
+                        int roboticsLevel = getCurrentFactoriesPerPop();
+                        float roboticsCap = roboticsLevel * col.population;
+                        // If we had a real "factories" count, we'd cap here.
+                        // For now, we boost production slightly based on robotics progress.
+                        float roboticsBonus = 1.0f + (roboticsLevel - 2) * 0.08f; // +8% per extra level beyond base 2
+                        if (roboticsBonus > 1.0f) {
+                            col.productionOutput *= roboticsBonus;
+                            col.netProduction    *= roboticsBonus;
+                        }
+
+                        // Apply results to empire using loaded economy config where possible
+                        float treasuryShare = 0.85f;
+                        float researchShare = 0.75f;
+                        player.treasury += static_cast<int>(col.netProduction * treasuryShare +
+                                                            (7.0f * gEconomyConfig.workerOutput * 2.0f));
+                        player.researchPool += static_cast<int>(col.researchOutput * researchShare + 4);
 
                         // Apply production to active building project
                         if (col.projectCost > 0 && col.projectProgress < col.projectCost) {
@@ -704,9 +809,8 @@ void processEndOfTurn() {
                         }
                     }
                     if (hasColonizable && arrivedSys->ownerEmpireId == -1) {
-                        gTurnReportMessages.push_back(sh.name + " is ready to colonize " + arrivalName + ".");
-                        // Future: trigger colonization choice menu here
-                        // For now, we log it prominently in the report
+                        gTurnReportMessages.push_back(sh.name + " has arrived and is ready to colonize " + arrivalName + ".");
+                        gTurnReportMessages.push_back("Enter the system view and use the Star System Menu to colonize.");
                     }
                 }
             }
@@ -737,8 +841,12 @@ void processEndOfTurn() {
         for (const auto& col : gGameState.colonies) {
             if (col.ownerId == emp.id) {
                 aiColonies++;
-                emp.treasury += static_cast<int>(45 * emp.productionMod);
-                emp.researchPool += static_cast<int>(9 * emp.researchMod);
+                // AI passive income now respects loaded economy config + robotics from TechTree
+                float aiBaseIncome = 45.0f * (gEconomyConfig.workerOutput / 0.5f);
+                int aiRobotics = getCurrentFactoriesPerPop();
+                float aiRoboticsBonus = 1.0f + (aiRobotics - 2) * 0.06f;
+                emp.treasury += static_cast<int>(aiBaseIncome * emp.productionMod * aiRoboticsBonus);
+                emp.researchPool += static_cast<int>((aiBaseIncome * 0.2f) * emp.researchMod);
             }
         }
 
