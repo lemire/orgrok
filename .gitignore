@@ -1,0 +1,29 @@
+# Build artifacts
+build/
+bin/
+out/
+
+# CPM downloaded files (optional - some people commit the versioned one)
+cmake/CPM_*.cmake
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Compiled object files
+*.o
+*.obj
+*.a
+*.lib
+
+# Logs
+*.log
+
+# Future asset directories (when we add real content later)
+# assets/fonts/*
+# assets/sounds/*
+# !assets/fonts/.gitkeep
+# !assets/sounds/.gitkeep
