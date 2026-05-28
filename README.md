@@ -1,3 +1,6 @@
+** This is an experiment with Grok Build, not something I am coding.**
+
+
 # Orion Reborn
 
 A modern spiritual successor / clone of **Master of Orion (1993)** — the game that defined the 4X genre.
