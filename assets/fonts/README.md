@@ -34,6 +34,15 @@ Place any TrueType (.ttf) or OpenType (.otf) font file in this directory and the
 - The game only needs one .ttf file right now (it re-uses it at two sizes).
 - Keep file names simple (e.g. `Inter-Regular.ttf`) so the auto-loader finds them.
 
+## Font quality improvements (2026)
+The UI now uses an optimized `ImFontConfig`:
+- Oversampling (stb_truetype path) + `PixelSnapH` + `RasterizerMultiply` for crisper text.
+- When CMake detects FreeType (highly recommended), we build with `imgui_freetype` + `ForceAutoHint` for **much** sharper results, especially at small sizes. This is the single biggest visual upgrade for fonts in Dear ImGui.
+
+**FreeType is optional** — the game builds and runs without it (falls back to improved stb_truetype). On macOS with Homebrew it's usually auto-detected (`brew install freetype`). On Linux: `sudo apt install libfreetype6-dev` (or equivalent). Windows: vcpkg or manual.
+
+After installing FreeType, just reconfigure + rebuild (`cmake -B build -S . && cmake --build build`).
+
 ## Example layout after adding a font
 assets/fonts/
     Inter-Regular.ttf

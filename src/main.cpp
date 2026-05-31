@@ -2,6 +2,10 @@
 #include "rlImGui.h"
 #include "imgui.h"
 
+#ifdef IMGUI_ENABLE_FREETYPE
+#include "misc/freetype/imgui_freetype.h"
+#endif
+
 // Game core (Phase 1)
 #include "core/GameState.hpp"
 #include "core/GalaxyGeneration.hpp"
@@ -850,6 +854,24 @@ int main(int argc, char** argv) {
             searchDirs.push_back(std::string(appDir) + "/orion-reborn/assets/fonts/");
         }
 
+        // === High-quality font configuration (addresses blurry/aliased fonts) ===
+        // - Oversampling (stb_truetype only): 3xH/1xV is a great sweet spot.
+        // - FreeType (when enabled in CMake): much sharper + hinting, oversampling ignored.
+        // - PixelSnapH + RasterizerMultiply improve crispness and small-font brightness.
+        ImFontConfig fontCfg;
+        fontCfg.OversampleH = 3;
+        fontCfg.OversampleV = 1;
+        fontCfg.PixelSnapH  = true;
+        fontCfg.RasterizerMultiply = 1.25f;   // brighten thin glyphs slightly (1.0 = neutral)
+
+#ifdef IMGUI_ENABLE_FREETYPE
+        // Force auto-hinter often gives the best results for UI sizes on many fonts.
+        fontCfg.FontLoaderFlags |= ImGuiFreeTypeLoaderFlags_ForceAutoHint;
+        // Other useful options you can experiment with:
+        // fontCfg.FontLoaderFlags |= ImGuiFreeTypeLoaderFlags_LightHinting;
+        // fontCfg.FontLoaderFlags |= ImGuiFreeTypeLoaderFlags_Bold; // synthetic
+#endif
+
         std::string loadedFullPath;
         bool found = false;
 
@@ -864,8 +886,8 @@ int main(int argc, char** argv) {
                 if (FileExists(fullPath.c_str())) {
                     // Load at a larger physical size than we will display.
                     // The extra "virtual" space between glyphs improves readability.
-                    gFontMain  = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 18.0f);
-                    gFontTitle = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 26.0f);
+                    gFontMain  = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 18.0f, &fontCfg);
+                    gFontTitle = io.Fonts->AddFontFromFileTTF(fullPath.c_str(), 26.0f, &fontCfg);
 
                     loadedFullPath = fullPath;
                     found = true;
@@ -877,8 +899,17 @@ int main(int argc, char** argv) {
 
         if (found) {
             TraceLog(LOG_INFO, "Loaded custom font: %s", loadedFullPath.c_str());
+#ifdef IMGUI_ENABLE_FREETYPE
+            TraceLog(LOG_INFO, "  (using FreeType rasterizer for best quality)");
+#else
+            TraceLog(LOG_INFO, "  (using stb_truetype + oversampling; install FreeType for even better results)");
+#endif
         } else {
-            gFontMain  = io.Fonts->AddFontDefault();
+            // Fallback: still use a tuned config for the embedded default font
+            ImFontConfig defaultCfg;
+            defaultCfg.PixelSnapH = true;
+            defaultCfg.RasterizerMultiply = 1.2f;
+            gFontMain  = io.Fonts->AddFontDefault(&defaultCfg);
             gFontTitle = gFontMain;
             TraceLog(LOG_INFO, "Using default ImGui font (no .ttf in assets/fonts/)");
         }

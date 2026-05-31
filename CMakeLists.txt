@@ -98,6 +98,65 @@ CPMAddPackage(
 enable_testing()
 
 # =============================================================================
+# Optional FreeType (for high-quality font rasterization in Dear ImGui)
+# =============================================================================
+# FreeType is optional. When found, we build imgui_freetype and define IMGUI_ENABLE_FREETYPE
+# for significantly sharper fonts (especially at small/medium sizes). Without it we still
+# apply good stb_truetype oversampling + tweaks.
+set(ORION_FREETYPE_ENABLED FALSE)
+
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_FREETYPE QUIET freetype2)
+    if(PC_FREETYPE_FOUND)
+        set(FREETYPE_INCLUDE_DIRS ${PC_FREETYPE_INCLUDE_DIRS})
+        set(FREETYPE_LIBRARIES    ${PC_FREETYPE_LINK_LIBRARIES})
+        set(ORION_FREETYPE_ENABLED TRUE)
+        message(STATUS "FreeType: found via pkg-config (${PC_FREETYPE_VERSION})")
+    endif()
+endif()
+
+if(NOT ORION_FREETYPE_ENABLED AND APPLE)
+    # Homebrew fallback (common on macOS dev machines)
+    find_path(FREETYPE_INCLUDE_DIR
+        NAMES ft2build.h
+        PATHS
+            /opt/homebrew/opt/freetype/include/freetype2
+            /usr/local/opt/freetype/include/freetype2
+        NO_DEFAULT_PATH
+    )
+    find_library(FREETYPE_LIBRARY
+        NAMES freetype
+        PATHS
+            /opt/homebrew/opt/freetype/lib
+            /usr/local/opt/freetype/lib
+        NO_DEFAULT_PATH
+    )
+    if(FREETYPE_INCLUDE_DIR AND FREETYPE_LIBRARY)
+        set(FREETYPE_INCLUDE_DIRS ${FREETYPE_INCLUDE_DIR})
+        set(FREETYPE_LIBRARIES    ${FREETYPE_LIBRARY})
+        set(ORION_FREETYPE_ENABLED TRUE)
+        message(STATUS "FreeType: found via Homebrew fallback")
+    endif()
+endif()
+
+if(NOT ORION_FREETYPE_ENABLED)
+    find_package(Freetype QUIET)
+    if(Freetype_FOUND)
+        set(FREETYPE_INCLUDE_DIRS ${FREETYPE_INCLUDE_DIRS})
+        set(FREETYPE_LIBRARIES    ${FREETYPE_LIBRARIES})
+        set(ORION_FREETYPE_ENABLED TRUE)
+        message(STATUS "FreeType: found via find_package")
+    endif()
+endif()
+
+if(ORION_FREETYPE_ENABLED)
+    message(STATUS "  -> High-quality FreeType font rendering ENABLED")
+else()
+    message(STATUS "  -> FreeType not found; using stb_truetype with oversampling (good but not optimal)")
+endif()
+
+# =============================================================================
 # ImGui + rlImGui static library (clean encapsulation)
 # =============================================================================
 add_library(imgui_ri STATIC
@@ -129,6 +188,22 @@ if(MSVC)
     target_compile_options(imgui_ri PRIVATE /W0)
 else()
     target_compile_options(imgui_ri PRIVATE -w)
+endif()
+
+# ---- Optional FreeType integration (must be after target creation) ----
+if(ORION_FREETYPE_ENABLED)
+    target_sources(imgui_ri PRIVATE
+        ${imgui_SOURCE_DIR}/misc/freetype/imgui_freetype.cpp
+    )
+    target_compile_definitions(imgui_ri PUBLIC
+        IMGUI_ENABLE_FREETYPE
+    )
+    target_include_directories(imgui_ri PUBLIC
+        ${FREETYPE_INCLUDE_DIRS}
+    )
+    target_link_libraries(imgui_ri PUBLIC
+        ${FREETYPE_LIBRARIES}
+    )
 endif()
 
 # =============================================================================
