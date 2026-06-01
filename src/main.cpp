@@ -45,6 +45,11 @@ static int  gSelectedColonyIndex = -1;   // index into gGameState.colonies
 static bool gInSystemView = false;
 static int  gViewedSystemId = -1;        // which star system we are currently zoomed into
 
+// Planet Detail View (drill-down from star system view)
+static bool gInPlanetView = false;
+static int  gViewedPlanetSystemId = -1;
+static int  gViewedPlanetIndex = -1;     // index into the system's planets vector
+
 // System View planet selection
 static int gSelectedPlanetIndex = -1;    // index within viewedSys->planets, -1 = none
 
@@ -192,7 +197,7 @@ static Color planetColor(orion::PlanetType type) {
 }
 
 // Draw a visually distinct star with spectral-type variety (no textures)
-static void DrawStarVaried(float x, float y, float zoom, bool owned, bool selected, bool hovered, int seed) {
+static void DrawStarVaried(float x, float y, float zoom, bool owned, bool selected, bool hovered, int seed, orion::SystemSpecial special = orion::SystemSpecial::None) {
     // Use seed for stable but varied appearance
     int type = seed % 7; // 0-6 spectral-ish types
 
@@ -266,6 +271,218 @@ static void DrawStarVaried(float x, float y, float zoom, bool owned, bool select
     if (owned && !selected) {
         DrawCircleLines(x, y, 11.5f * zoom, Color{255, 220, 120, 90});
     }
+
+    // === Special system visual flair (pulsing colored ring / aura) ===
+    if (special != orion::SystemSpecial::None) {
+        Color accent{200, 180, 255, 180}; // default mystery purple
+        float baseRadius = 15.5f * zoom;
+        float pulseSpeed = 2.8f;
+        bool danger = false;
+
+        switch (special) {
+            case orion::SystemSpecial::PirateHaven:
+            case orion::SystemSpecial::BiohazardZone:
+            case orion::SystemSpecial::AutomatedDefense:
+            case orion::SystemSpecial::UnstableStar:
+                accent = {255, 90, 70, 195}; // red/orange danger
+                danger = true;
+                pulseSpeed = 4.2f;
+                break;
+            case orion::SystemSpecial::WormholeNexus:
+            case orion::SystemSpecial::NebulaShroud:
+                accent = {160, 120, 255, 185}; // deep violet
+                pulseSpeed = 3.6f;
+                break;
+            case orion::SystemSpecial::HyperRichWorld:
+            case orion::SystemSpecial::DerelictMegastructure:
+                accent = {255, 215, 90, 200}; // rich gold/amber
+                break;
+            case orion::SystemSpecial::PrecursorRuins:
+            case orion::SystemSpecial::RogueAI:
+                accent = {80, 220, 200, 185}; // teal / ancient tech
+                break;
+            case orion::SystemSpecial::PrimitiveSpecies:
+            case orion::SystemSpecial::RebelColony:
+                accent = {140, 230, 140, 175}; // vibrant green (life/diplomacy)
+                break;
+            default: break;
+        }
+
+        float pulse = 0.82f + 0.18f * sinf(GetTime() * pulseSpeed + (seed * 0.7f));
+        float r = baseRadius * pulse;
+
+        // Outer thin ring
+        DrawCircleLines(x, y, r, accent);
+        // Inner highlight ring for extra pop on danger/high value
+        if (danger || special == orion::SystemSpecial::WormholeNexus || special == orion::SystemSpecial::DerelictMegastructure) {
+            DrawCircleLines(x, y, r * 0.72f, Color{accent.r, accent.g, accent.b, (unsigned char)(accent.a * 0.55f)});
+        }
+    }
+}
+
+// =====================================================================================
+// Detailed Animated Planet View (new immersive colony surface visualization)
+// =====================================================================================
+// Called when the player drills down into a specific planet.
+// Features:
+// - Type-specific base colors, atmosphere, and surface features
+// - Slow rotation animation
+// - Population-driven city lights (density + twinkling)
+// - Cloud / haze layers
+// - Special effects per planet type (lava, ice caps, storms, etc.)
+// - Hooks for future building visualization (factories, shields, etc.)
+static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
+                                       const orion::Planet& pl,
+                                       float population,
+                                       float maxPopulation,
+                                       float time) {
+    using PT = orion::PlanetType;
+
+    const float popRatio = maxPopulation > 0.1f ? (population / maxPopulation) : 0.0f;
+    const float popFactor = std::clamp(popRatio * popRatio * 1.15f, 0.0f, 1.0f); // more lights at high pop
+
+    // === Base color from planet type (richer palette) ===
+    Color base = planetColor(pl.type);
+    Color darkBase = { (uint8_t)(base.r * 0.45f), (uint8_t)(base.g * 0.42f), (uint8_t)(base.b * 0.48f), 255 };
+    Color brightBase = { (uint8_t)std::min(255, (int)(base.r * 1.25f)),
+                         (uint8_t)std::min(255, (int)(base.g * 1.2f)),
+                         (uint8_t)std::min(255, (int)(base.b * 1.15f)), 255 };
+
+    // Subtle rotation offset for the whole planet
+    float rot = time * 0.035f + (pl.name.length() * 0.4f);   // stable per planet
+
+    // 1. Soft outer atmosphere glow (bigger for thicker atmospheres)
+    float atmSize = radius * (pl.type >= PT::Ocean ? 1.28f : 1.15f);
+    Color atmColor = (pl.type == PT::Gaia)   ? Color{120, 255, 170, 55} :
+                     (pl.type >= PT::Ocean)  ? Color{90, 160, 255, 48} :
+                     (pl.type <= PT::Barren) ? Color{180, 140, 90, 38} : Color{140, 130, 160, 42};
+    DrawCircleV({cx, cy}, atmSize, atmColor);
+
+    // 2. Main planet body
+    DrawCircleV({cx, cy}, radius, base);
+
+    // 3. Simple "terminator" shading (fake 3D lighting from upper-left)
+    // Draw a slightly offset darker circle on the "night" side
+    float shadeOffsetX = radius * 0.18f;
+    float shadeOffsetY = radius * 0.12f;
+    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.96f, Color{darkBase.r, darkBase.g, darkBase.b, 165});
+
+    // 4. Surface details + rotation (procedural "continents" / features)
+    int featureSeed = (int)pl.name.length() * 31 + static_cast<int>(pl.size) * 7 + static_cast<int>(pl.type) * 3;
+
+    // Draw a few rotating "landmass" or surface blobs using offset circles
+    for (int f = 0; f < 5; ++f) {
+        float fAngle = rot * (0.6f + (f % 3) * 0.15f) + (f * 1.8f) + (featureSeed % 7);
+        float dist = radius * (0.28f + (f % 4) * 0.07f);
+        float fx = cx + cosf(fAngle) * dist;
+        float fy = cy + sinf(fAngle) * dist * 0.82f;
+
+        float fSize = radius * (0.22f + (f % 3) * 0.06f);
+        Color fCol = (pl.type >= PT::Ocean && pl.type != PT::Swamp) ?
+                     Color{ (uint8_t)(base.r * 0.7f), (uint8_t)(base.g * 0.85f), (uint8_t)(base.b * 0.6f), 110 } :
+                     Color{ (uint8_t)(base.r * 0.55f), (uint8_t)(base.g * 0.5f), (uint8_t)(base.b * 0.55f), 95 };
+
+        if (pl.type == PT::Radiated || pl.type == PT::Barren) {
+            fCol = {90, 75, 60, 120}; // crater-like
+            DrawCircleV({fx, fy}, fSize * 0.6f, fCol);
+            DrawCircleLines(fx, fy, fSize * 0.65f, Color{60, 50, 40, 160});
+        } else {
+            DrawCircleV({fx, fy}, fSize, fCol);
+        }
+    }
+
+    // 5. Cloud / haze layer (rotates at different speed)
+    if (pl.type >= PT::Arid) {
+        float cloudRot = time * 0.055f + (featureSeed * 0.3f);
+        Color cloudCol = (pl.type == PT::Gaia) ? Color{255, 255, 255, 58} :
+                         (pl.type >= PT::Ocean) ? Color{235, 245, 255, 52} : Color{220, 210, 190, 45};
+
+        for (int c = 0; c < 3; ++c) {
+            float ca = cloudRot + c * 2.1f;
+            float cd = radius * (0.45f + c * 0.12f);
+            float cloudX = cx + cosf(ca) * cd * 0.7f;
+            float cloudY = cy + sinf(ca * 0.7f) * cd * 0.55f;
+            float cloudR = radius * (0.55f + (c % 2) * 0.15f);
+            DrawCircleV({cloudX, cloudY}, cloudR, cloudCol);
+        }
+    }
+
+    // 6. City lights / civilization (population driven, on the night side)
+    if (popFactor > 0.02f) {
+        int lightCount = (int)(popFactor * 38.0f) + (population > 4.0f ? 6 : 0);
+        for (int l = 0; l < lightCount; ++l) {
+            // Use stable "random" positions based on planet + light index
+            uint32_t h = (featureSeed * 31u + l * 17u + (uint32_t)(time * 0.3f)) % 360;
+            float la = (h * 0.01745f) + rot * 0.9f;   // rotate with planet
+
+            // Bias lights toward the "night" side (roughly right side in our fake lighting)
+            float lx = cx + cosf(la) * (radius * 0.72f);
+            float ly = cy + sinf(la) * (radius * 0.62f);
+
+            // Only draw lights on the darker half
+            float lightSide = cosf(la - 0.8f); // rough night side test
+            if (lightSide < 0.35f) {
+                float twinkle = 0.65f + 0.35f * sinf(time * 3.8f + l * 1.7f + featureSeed);
+                float lsize = 1.1f + (popFactor * 1.6f) * (0.6f + (l % 3) * 0.2f);
+
+                Color lightCol = (pl.type == PT::Gaia) ? Color{180, 255, 200, (uint8_t)(200 * twinkle)} :
+                                 (pl.type >= PT::Ocean) ? Color{160, 210, 255, (uint8_t)(185 * twinkle)} :
+                                 Color{255, 220, 120, (uint8_t)(210 * twinkle)};
+
+                DrawCircleV({lx, ly}, lsize, lightCol);
+
+                // Occasional brighter core
+                if ((l % 3) == 0) {
+                    DrawCircleV({lx, ly}, lsize * 0.45f, Color{255, 255, 240, (uint8_t)(120 * twinkle)});
+                }
+            }
+        }
+    }
+
+    // 7. Type-specific special effects
+    if (pl.type == PT::Radiated) {
+        // Lava / radioactive glow cracks
+        for (int v = 0; v < 4; ++v) {
+            float va = rot * 0.8f + v * 1.6f;
+            float vx = cx + cosf(va) * radius * 0.6f;
+            float vy = cy + sinf(va) * radius * 0.52f;
+            Color lava = {255, 80, 30, (uint8_t)(90 + 40 * sinf(time * 4.0f + v))};
+            DrawCircleV({vx, vy}, 2.2f + sinf(time + v) * 0.8f, lava);
+        }
+    }
+
+    if (pl.type == PT::Gaia || pl.type == PT::Terran) {
+        // Gentle aurora / life shimmer near poles
+        float auroraPhase = sinf(time * 0.7f) * 0.5f + 0.5f;
+        DrawCircleV({cx - radius * 0.3f, cy - radius * 0.65f}, radius * 0.22f,
+                    Color{120, 255, 180, (uint8_t)(35 * auroraPhase)});
+        DrawCircleV({cx + radius * 0.25f, cy + radius * 0.68f}, radius * 0.18f,
+                    Color{140, 230, 255, (uint8_t)(28 * auroraPhase)});
+    }
+
+    if (pl.type <= PT::Desert && pl.type != PT::Swamp) {
+        // Ice caps / polar regions for colder/dry worlds
+        float iceAlpha = (pl.type == PT::Radiated) ? 35 : 70;
+        DrawCircleV({cx, cy - radius * 0.78f}, radius * 0.32f, Color{235, 245, 255, (uint8_t)iceAlpha});
+        DrawCircleV({cx, cy + radius * 0.78f}, radius * 0.27f, Color{235, 245, 255, (uint8_t)(iceAlpha * 0.8f)});
+    }
+
+    // 8. Final bright highlight (specular)
+    DrawCircleV({cx - radius * 0.32f, cy - radius * 0.30f}, radius * 0.28f, Color{255, 255, 255, 38});
+
+    // 9. Subtle surface grid / texture suggestion at high population (future building hint)
+    if (popFactor > 0.45f) {
+        for (int g = 0; g < 7; ++g) {
+            float ga = rot * 0.4f + g * 0.9f;
+            float gx = cx + cosf(ga) * radius * 0.55f;
+            float gy = cy + sinf(ga) * radius * 0.48f;
+            DrawCircleLines(gx, gy, 1.5f, Color{255, 255, 255, 22});
+        }
+    }
+
+    // Selection / focus ring
+    DrawCircleLines(cx, cy, radius + 6.0f, Color{100, 180, 255, 80});
+    DrawCircleLines(cx, cy, radius + 10.0f, Color{70, 140, 210, 45});
 }
 
 // === Animated deep space background ===
@@ -966,6 +1183,10 @@ int main(int argc, char** argv) {
             if (gShipOrderMode) {
                 gShipOrderMode = false;
                 gShipInOrderMode = -1;
+            } else if (gInPlanetView) {
+                // Back out one level: Planet → Star System
+                gInPlanetView = false;
+                gSelectedPlanetIndex = gViewedPlanetIndex;
             } else if (gInSystemView) {
                 gInSystemView = false;
                 gSelectedPlanetIndex = -1;
@@ -976,6 +1197,17 @@ int main(int argc, char** argv) {
         if (gShipOrderMode && gInSystemView) {
             gInSystemView = false;
             gSelectedPlanetIndex = -1;
+        }
+
+        // Right-click backs out of planet view (or system view)
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+            if (gInPlanetView) {
+                gInPlanetView = false;
+                gSelectedPlanetIndex = gViewedPlanetIndex;
+            } else if (gInSystemView && !gShipOrderMode) {
+                gInSystemView = false;
+                gSelectedPlanetIndex = -1;
+            }
         }
 
         // Cursor handling for ship order mode
@@ -1233,7 +1465,12 @@ int main(int argc, char** argv) {
                     const auto& clickedPl = viewedSys->planets[clickedIndex];
 
                     if (clickedPl.isColonized() && clickedPl.ownerEmpireId == 0) {
-                        // Open management + buildings windows
+                        // Drill down into immersive Planet View
+                        gViewedPlanetSystemId = viewedSys->starId;
+                        gViewedPlanetIndex = clickedIndex;
+                        gInPlanetView = true;
+
+                        // Also keep colony window data in sync (for now)
                         gSelectedColonyIndex = -1;
                         for (int c = 0; c < static_cast<int>(gGameState.colonies.size()); ++c) {
                             if (gGameState.colonies[c].planetId == viewedSys->starId) {
@@ -1241,9 +1478,7 @@ int main(int argc, char** argv) {
                                 break;
                             }
                         }
-                        gShowColonyWindow = (gSelectedColonyIndex >= 0);
-                        gSelectedColonyForBuildings = gSelectedColonyIndex;
-                        gShowColonyBuildingsWindow = (gSelectedColonyForBuildings >= 0);
+                        gShowColonyWindow = false; // we'll show integrated UI in planet view instead
                     } else if (!clickedPl.isColonized() && clickedPl.canBeColonized()) {
                         // Just select the planet. Colonization now requires explicit confirmation
                         // via the Star System Menu (no automatic colonization on click).
@@ -1314,9 +1549,45 @@ int main(int argc, char** argv) {
 
         // === Drawing ===
         BeginDrawing();
-        DrawAstronomicalBackground(screenW, screenH, gInSystemView);
+        DrawAstronomicalBackground(screenW, screenH, gInSystemView || gInPlanetView);
 
-        if (gInSystemView) {
+        if (gInPlanetView) {
+            // ==================== PLANET DETAIL VIEW (immersive animated surface) ====================
+            auto* viewedSys = gGameState.galaxy.findSystemById(gViewedPlanetSystemId);
+            if (!viewedSys || gViewedPlanetIndex < 0 ||
+                gViewedPlanetIndex >= static_cast<int>(viewedSys->planets.size())) {
+                gInPlanetView = false;
+            } else {
+                const auto& planet = viewedSys->planets[gViewedPlanetIndex];
+
+                // Find the colony for population data
+                float pop = 0.0f;
+                float maxPop = static_cast<float>(planet.maxPopulation);
+                for (const auto& col : gGameState.colonies) {
+                    if (col.planetId == viewedSys->starId && col.ownerId == 0) {
+                        pop = col.population;
+                        maxPop = col.maxPopulation;
+                        break;
+                    }
+                }
+
+                float time = static_cast<float>(GetTime());
+                float planetRadius = 135.0f;   // Nice large size for detail
+
+                // Draw the beautiful animated planet centered
+                DrawDetailedAnimatedPlanet(screenW * 0.42f, screenH * 0.52f, planetRadius,
+                                           planet, pop, maxPop, time);
+
+                // Subtle label under the planet
+                DrawTextEx(GetFontDefault(),
+                           TextFormat("%s  •  %s  •  Pop %.1fM",
+                                      planet.name.c_str(),
+                                      to_string(planet.type).data(),
+                                      pop),
+                           {screenW * 0.42f - 140, screenH * 0.52f + planetRadius + 18},
+                           18.0f, 1.0f, Color{200, 210, 230, 230});
+            }
+        } else if (gInSystemView) {
             // ==================== STAR SYSTEM VIEW (raylib part only) ====================
             auto* viewedSys = gGameState.galaxy.findSystemById(gViewedSystemId);
             if (!viewedSys) {
@@ -1326,7 +1597,7 @@ int main(int argc, char** argv) {
                 float cy = screenH * 0.42f;
 
                 // Draw the central star big
-                DrawStarVaried(cx, cy, 3.2f, viewedSys->ownerEmpireId == 0, true, false, viewedSys->starId * 7);
+                DrawStarVaried(cx, cy, 3.2f, viewedSys->ownerEmpireId == 0, true, false, viewedSys->starId * 7, viewedSys->specialStatus);
 
                 // Draw planets orbiting the star (slow animation + clickable)
                 const auto& planets = viewedSys->planets;
@@ -1524,7 +1795,7 @@ int main(int argc, char** argv) {
                 bool owned    = (sys.ownerEmpireId == 0);
 
                 // Draw only the star/sun
-                DrawStarVaried(sx, sy, gZoom, owned, selected, hovered, sys.starId);
+                DrawStarVaried(sx, sy, gZoom, owned, selected, hovered, sys.starId, sys.specialStatus);
 
                 // Colony ownership flag (colored by empire)
                 if (sys.hasColony()) {
@@ -1709,6 +1980,28 @@ int main(int argc, char** argv) {
                         }
                     }
                     ImGui::Text("Owned by %s", ownerName.c_str());
+                }
+
+                // Special system status (rare & flavorful)
+                if (sys->specialStatus != orion::SystemSpecial::None) {
+                    ImGui::Separator();
+                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.35f, 1.0f), "★ %s", to_string(sys->specialStatus).data());
+                    // Short one-line flavor hook (keep tooltip compact)
+                    switch (sys->specialStatus) {
+                        case orion::SystemSpecial::PirateHaven:           ImGui::TextDisabled("Pirate syndicate stronghold — expect raids"); break;
+                        case orion::SystemSpecial::PrecursorRuins:        ImGui::TextDisabled("Ancient ruins — high research value, risks"); break;
+                        case orion::SystemSpecial::NebulaShroud:          ImGui::TextDisabled("Dense nebula — stealth & hazards"); break;
+                        case orion::SystemSpecial::HyperRichWorld:        ImGui::TextDisabled("Mineral wealth — geological instability"); break;
+                        case orion::SystemSpecial::PrimitiveSpecies:      ImGui::TextDisabled("Native civilization — diplomacy or conquest"); break;
+                        case orion::SystemSpecial::AutomatedDefense:      ImGui::TextDisabled("Lethal automated defenses — huge rewards"); break;
+                        case orion::SystemSpecial::BiohazardZone:         ImGui::TextDisabled("Plague world — bio-research opportunity"); break;
+                        case orion::SystemSpecial::WormholeNexus:         ImGui::TextDisabled("Strategic wormhole hub — major mobility"); break;
+                        case orion::SystemSpecial::DerelictMegastructure: ImGui::TextDisabled("Megastructure remnants — long-term power"); break;
+                        case orion::SystemSpecial::RogueAI:               ImGui::TextDisabled("Rogue AI entity — advanced tech or threat"); break;
+                        case orion::SystemSpecial::RebelColony:           ImGui::TextDisabled("Breakaway colony — negotiable, unique assets"); break;
+                        case orion::SystemSpecial::UnstableStar:          ImGui::TextDisabled("Unstable star — exotic research, catastrophe risk"); break;
+                        default: break;
+                    }
                 }
 
                 // Ships present
@@ -2246,6 +2539,10 @@ int main(int argc, char** argv) {
                            viewedSys->planets.size(),
                            (viewedSys->ownerEmpireId == 0) ? "You" : "Unclaimed / Other");
 
+                if (viewedSys->specialStatus != orion::SystemSpecial::None) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.35f, 1.0f), "★ Special: %s", to_string(viewedSys->specialStatus).data());
+                }
+
                 ImGui::Separator();
 
                 ImGui::Text("Planets:");
@@ -2341,7 +2638,112 @@ int main(int argc, char** argv) {
 
                 if (ImGui::Button("Return to Galaxy Map", ImVec2(-1, 0))) {
                     gInSystemView = false;
+                    gInPlanetView = false;
                     gSelectedPlanetIndex = -1;
+                }
+
+                ImGui::End();
+            }
+        }
+
+        // ==================== PLANET VIEW UI (immersive colony management) ====================
+        if (gInPlanetView) {
+            auto* viewedSys = gGameState.galaxy.findSystemById(gViewedPlanetSystemId);
+            if (viewedSys && gViewedPlanetIndex >= 0 &&
+                gViewedPlanetIndex < static_cast<int>(viewedSys->planets.size())) {
+
+                const auto& planet = viewedSys->planets[gViewedPlanetIndex];
+
+                // Find matching colony
+                orion::Colony* colonyPtr = nullptr;
+                int colonyIdx = -1;
+                for (int c = 0; c < static_cast<int>(gGameState.colonies.size()); ++c) {
+                    if (gGameState.colonies[c].planetId == viewedSys->starId) {
+                        colonyPtr = &gGameState.colonies[c];
+                        colonyIdx = c;
+                        break;
+                    }
+                }
+
+                ImGui::SetNextWindowPos(ImVec2(30, 40), ImGuiCond_FirstUseEver);
+                ImGui::SetNextWindowSize(ImVec2(420, 480), ImGuiCond_FirstUseEver);
+                ImGui::Begin("Planet Surface", nullptr, ImGuiWindowFlags_NoCollapse);
+
+                ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "%s", planet.name.c_str());
+                ImGui::SameLine();
+                ImGui::TextDisabled("(%s • %s)", to_string(planet.type).data(), to_string(planet.size).data());
+
+                if (viewedSys->specialStatus != orion::SystemSpecial::None) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.35f, 1.0f), "★ %s", to_string(viewedSys->specialStatus).data());
+                }
+
+                ImGui::Separator();
+
+                if (colonyPtr) {
+                    ImGui::Text("Population: %.1f / %.0f million", colonyPtr->population, colonyPtr->maxPopulation);
+
+                    // Quick growth preview
+                    float growth = (colonyPtr->foodNet > 0.8f) ? 0.11f : (colonyPtr->foodNet > 0.2f ? 0.05f : 0.01f);
+                    if (planet.traits & static_cast<uint32_t>(orion::PlanetTrait::Fertile)) growth *= 1.25f;
+                    ImGui::TextColored(ImVec4(0.5f, 0.95f, 0.6f, 1.0f), "Est. growth: +%.2fM / turn", growth);
+
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(0.85f, 0.92f, 1.0f, 1.0f), "Output this turn");
+
+                    // Recalculate for live numbers
+                    float techB = gGameState.technology.getIndustryBonus();
+                    float researchB = gGameState.technology.getResearchBonus();
+                    float ownerMod = 1.0f;
+                    for (const auto& e : gGameState.empires) if (e.id == colonyPtr->ownerId) { ownerMod = e.productionMod; break; }
+
+                    colonyPtr->recalculateOutputs(planet.size, planet.type, planet.richness, planet.traits,
+                                                  colonyPtr->maxPopulation, techB, ownerMod);
+
+                    ImGui::Text("Industry: %.1f   Research: %.1f   Food Net: %.1f",
+                                colonyPtr->productionOutput, colonyPtr->researchOutput * researchB, colonyPtr->foodNet);
+
+                    ImGui::Separator();
+                    ImGui::Text("Production Project");
+
+                    // Project selection buttons (reused from old logic)
+                    for (int p = 0; p < 5; ++p) {
+                        const char* proj = orion::Colony::PROJECTS[p];
+                        int cost = orion::Colony::PROJECT_COSTS[p];
+
+                        bool isCurrent = (colonyPtr->currentProject == proj);
+
+                        if (isCurrent) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.6f, 0.4f, 1.0f));
+
+                        if (ImGui::Button(proj, ImVec2(-1, 0))) {
+                            colonyPtr->currentProject = proj;
+                            colonyPtr->projectCost = cost;
+                            colonyPtr->projectProgress = 0.0f;
+                            PlaySound(sfxClick);
+                        }
+
+                        if (isCurrent) {
+                            ImGui::PopStyleColor();
+                            if (cost > 0) {
+                                float pct = colonyPtr->projectCost > 0 ?
+                                    (colonyPtr->projectProgress / colonyPtr->projectCost) : 0.0f;
+                                ImGui::ProgressBar(std::clamp(pct, 0.0f, 1.0f), ImVec2(-1, 0),
+                                                   TextFormat("%.0f / %d", colonyPtr->projectProgress, cost));
+                            }
+                        }
+                    }
+
+                    ImGui::Separator();
+                    ImGui::TextDisabled("Click a project above to queue it. Production applies on End Turn.");
+                } else {
+                    ImGui::TextDisabled("Uncolonized planet");
+                    ImGui::Text("Send a colony ship to settle here.");
+                }
+
+                ImGui::Spacing();
+                if (ImGui::Button("Return to Star System", ImVec2(-1, 0))) {
+                    gInPlanetView = false;
+                    // Keep the system view open so user stays in context
+                    gSelectedPlanetIndex = gViewedPlanetIndex;
                 }
 
                 ImGui::End();
@@ -2408,8 +2810,10 @@ int main(int argc, char** argv) {
 
             ImGui::End();
         }
-        // Colony Management window (restored)
-        DrawColonyManagementWindow();
+        // Colony Management window (restored) — hide when we're in the immersive planet view
+        if (!gInPlanetView) {
+            DrawColonyManagementWindow();
+        }
 
         // Dedicated per-colony buildings screen
 //         DrawColonyBuildingsWindow();

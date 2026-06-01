@@ -1,6 +1,7 @@
 #pragma once
 
 #include "entities/Planet.hpp"
+#include "core/Enums.hpp"   // For SystemSpecial (Planet.hpp transitively includes it, but we make it explicit)
 #include "raylib.h"   // Only for Vector2 in rendering layer - acceptable for now (position is pure data)
 #include <string>
 #include <vector>
@@ -17,6 +18,8 @@ struct StarSystem {
 
     int         ownerEmpireId = -1;      // Empire that controls the system (usually the one with colonies here)
     int         starId = -1;             // Unique index in galaxy
+
+    SystemSpecial specialStatus = SystemSpecial::None;  // Rare flavorful system-wide status
 
     [[nodiscard]] bool hasColony() const {
         for (const auto& p : planets) {

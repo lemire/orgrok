@@ -59,6 +59,8 @@ static void write_star_system(const StarSystem& s, simdjson::builder::string_bui
     sb.append_key_value("ownerEmpireId", static_cast<int64_t>(s.ownerEmpireId));
     sb.append_comma();
     sb.append_key_value("starId", static_cast<int64_t>(s.starId));
+    sb.append_comma();
+    sb.append_key_value("specialStatus", static_cast<int64_t>(static_cast<uint8_t>(s.specialStatus)));
     sb.end_object();
 }
 
@@ -313,6 +315,7 @@ static StarSystem read_star_system(simdjson::ondemand::object obj) {
     int64_t tmp;
     if (!obj["ownerEmpireId"].get(tmp)) s.ownerEmpireId = static_cast<int>(tmp);
     if (!obj["starId"].get(tmp)) s.starId = static_cast<int>(tmp);
+    if (!obj["specialStatus"].get(tmp)) s.specialStatus = static_cast<SystemSpecial>(tmp);
 
     // position array [x, y]
     simdjson::ondemand::array posArr;
@@ -532,6 +535,15 @@ bool loadGame(GameState& state, const std::string& filepath) {
         }
 
         std::cout << "Game loaded using simdjson ondemand (full Phase 2 state).\n";
+
+        // Enforce rule on load too: never show specials on systems that already have an owner
+        // (covers old saves, edited saves, or future cases where homes get assigned post-gen).
+        for (auto& sys : state.galaxy.systems) {
+            if (sys.ownerEmpireId >= 0) {
+                sys.specialStatus = SystemSpecial::None;
+            }
+        }
+
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Load failed: " << e.what() << std::endl;

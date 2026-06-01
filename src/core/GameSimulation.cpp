@@ -580,6 +580,14 @@ void initializeGame(const std::string& playerRace) {
             break;
         }
     }
+
+    // Never place special statuses on starting/home systems (player or AI).
+    // Homeworlds should feel "normal" at game start.
+    for (auto& sys : gGameState.galaxy.systems) {
+        if (sys.ownerEmpireId >= 0) {
+            sys.specialStatus = orion::SystemSpecial::None;
+        }
+    }
 }
 
 // processEndOfTurn moved here (final stage of the requested extraction).

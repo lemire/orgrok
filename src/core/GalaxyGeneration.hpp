@@ -143,6 +143,15 @@ inline Galaxy generateGalaxy(int desiredStars, int seed) {
             sys.planets.push_back(std::move(pl));
         }
 
+        // === Assign rare special status to a few systems (flavor + strategic variety) ===
+        // ~18% chance per system yields ~8-12 specials in a typical 55-star galaxy.
+        std::bernoulli_distribution specialRoll(0.18);
+        if (specialRoll(rng)) {
+            std::uniform_int_distribution<int> specPick(1, 12); // skip None
+            int pick = specPick(rng);
+            sys.specialStatus = static_cast<SystemSpecial>(pick);
+        }
+
         gal.systems.push_back(std::move(sys));
     }
 

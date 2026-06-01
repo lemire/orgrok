@@ -54,6 +54,23 @@ enum class PlanetTrait : uint32_t {
     GasGiant    = 1 << 3,   // Cannot be colonized (future)
 };
 
+// Special statuses for entire star systems (mutually exclusive for now; flavorful strategic variety)
+enum class SystemSpecial : uint8_t {
+    None = 0,
+    PirateHaven,             // Pirate syndicate base, raids, loot
+    PrecursorRuins,          // Ancient relics, research/artifacts, defense risk
+    NebulaShroud,            // Sensor/ship penalties, stealth bonus, exotic gases
+    HyperRichWorld,          // Massive mining, but geological disasters
+    PrimitiveSpecies,        // Pre-industrial natives: uplift/exploit/diplomacy choices
+    AutomatedDefense,        // Lethal old AI grid; huge rewards if neutralized
+    BiohazardZone,           // Plague world; research bio-tech or weaponize (risky)
+    WormholeNexus,           // Strategic chokepoint / fast travel hub
+    DerelictMegastructure,   // Dyson/Ringworld fragments: huge long-term payoff
+    RogueAI,                 // Powerful AI entity (hostile/neutral/trade); upload risk
+    RebelColony,             // Breakaway faction with infrastructure + unique heroes/ships
+    UnstableStar,            // Pulsar / near-supernova: research bonuses + catastrophe risk
+};
+
 constexpr std::string_view to_string(PlanetSize s) {
     switch (s) {
         case PlanetSize::Tiny:   return "Tiny";
@@ -109,6 +126,26 @@ constexpr int baseMaxPop(PlanetSize size) {
         case PlanetSize::Large:  return 9;
         case PlanetSize::Huge:   return 12;
         default:                 return 5;
+    }
+}
+
+// Human-readable names for system specials (used in tooltips / UI)
+constexpr std::string_view to_string(SystemSpecial s) {
+    switch (s) {
+        case SystemSpecial::None:                  return "None";
+        case SystemSpecial::PirateHaven:           return "Pirate Haven";
+        case SystemSpecial::PrecursorRuins:        return "Precursor Ruins";
+        case SystemSpecial::NebulaShroud:          return "Nebula Shroud";
+        case SystemSpecial::HyperRichWorld:        return "Hyper-Rich Resource World";
+        case SystemSpecial::PrimitiveSpecies:      return "Primitive Sentient Species";
+        case SystemSpecial::AutomatedDefense:      return "Ancient Automated Defense Grid";
+        case SystemSpecial::BiohazardZone:         return "Quarantined Biohazard Zone";
+        case SystemSpecial::WormholeNexus:         return "Wormhole Nexus";
+        case SystemSpecial::DerelictMegastructure: return "Derelict Megastructure";
+        case SystemSpecial::RogueAI:               return "Rogue AI Core World";
+        case SystemSpecial::RebelColony:           return "Rebel / Exiled Colony";
+        case SystemSpecial::UnstableStar:          return "Unstable Stellar Anomaly";
+        default:                                   return "?";
     }
 }
 

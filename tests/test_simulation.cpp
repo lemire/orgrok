@@ -89,6 +89,15 @@ TEST_CASE("Simulation: resetGameToNewGame produces a playable starting state", "
     }
     REQUIRE(playerColonyShips >= 1);
     REQUIRE(playerScouts >= 2);
+
+    // Verify special system statuses are generated for a few systems at random (deterministic with fixed seed).
+    // Home systems (player + AI capitals) are always stripped of specials in initializeGame.
+    int specialCount = 0;
+    for (const auto& sys : gGameState.galaxy.systems) {
+        if (sys.specialStatus != orion::SystemSpecial::None) ++specialCount;
+    }
+    REQUIRE(specialCount >= 4);   // After stripping any homeworld specials, still plenty elsewhere
+    REQUIRE(specialCount <= 18);
 }
 
 TEST_CASE("Simulation: processEndOfTurn advances the turn counter and populates reports", "[simulation][turn]") {
