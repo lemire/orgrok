@@ -57,8 +57,8 @@ def planet_svg(planet_type, variant, seed):
         "Arid":     {"base": (175, 148, 92), "dark": (98, 78, 50), "accent": (190, 162, 105), "name": "Arid"},
         "Swamp":    {"base": (62, 108, 72), "dark": (35, 62, 44), "accent": (82, 132, 92), "name": "Swamp"},
         "Ocean":    {"base": (48, 98, 168), "dark": (26, 48, 98), "accent": (62, 118, 182), "name": "Ocean"},
-        "Terran":   {"base": (58, 118, 68), "dark": (32, 64, 40), "accent": (78, 142, 88), "name": "Terran"},
-        "Gaia":     {"base": (68, 168, 98), "dark": (35, 88, 55), "accent": (105, 205, 125), "name": "Gaia"},
+        "Terran":   {"base": (52, 105, 172), "dark": (28, 55, 105), "accent": (78, 142, 88), "name": "Terran"},
+        "Gaia":     {"base": (58, 115, 185), "dark": (30, 60, 115), "accent": (95, 185, 105), "name": "Gaia"},
     }
     pal = palettes[planet_type]
 
@@ -163,23 +163,52 @@ def planet_svg(planet_type, variant, seed):
             elements.append(f'  <circle cx="{fax}" cy="{fay}" r="{random.uniform(18,32)}" fill="none" stroke="{color_str((95,135,105),40)}" stroke-width="2.5" />')
 
     elif planet_type in ("Terran", "Gaia"):
-        # Clustered continents for Earth/Gaia feel
-        cont_col = color_str(pal["accent"], 230) if planet_type == "Gaia" else color_str((random.randint(65,95), random.randint(108,138), random.randint(50,70)), 222)
-        groups = [( -0.32, -0.18), (0.18, 0.22), (-0.08, 0.35) ]  # rough continent centers
+        # Proper Earth-like: blue oceans (base) + green/brown continents + ice caps.
+        # Use multiple overlapping ellipses in clusters for irregular landmasses (continents + islands).
+        # More land / lusher for Gaia.
+        is_gaia = (planet_type == "Gaia")
+        # Land colors: mix of greens, some browns/tans for terrain variety
+        land_colors = [
+            (78, 138, 72) if not is_gaia else (88, 175, 82),
+            (68, 122, 62) if not is_gaia else (78, 158, 75),
+            (95, 145, 70) if not is_gaia else (105, 170, 80),
+            (115, 105, 65) if not is_gaia else (125, 115, 70),  # tan/brown highlights
+            (55, 105, 55) if not is_gaia else (62, 138, 60),
+        ]
+        # Continent cluster centers (spread for oceans between)
+        groups = [(-0.38, -0.22), (0.22, 0.18), (-0.12, 0.32), (0.35, -0.25)]
+        num_per_group = 6 if is_gaia else 5
         for gi, (ox, oy) in enumerate(groups):
             gcx = cx + ox * r
             gcy = cy + oy * r
-            for j in range(4 if planet_type == "Gaia" else 3):
-                fx = gcx + random.uniform(-55, 55)
-                fy = gcy + random.uniform(-42, 42)
-                rx = random.uniform(32, 72)
-                ry = rx * random.uniform(0.48, 0.82)
-                rot = random.randint(-38, 38)
-                elements.append(f'  <ellipse cx="{fx}" cy="{fy}" rx="{rx}" ry="{ry}" fill="{cont_col}" transform="rotate({rot} {fx} {fy})" />')
-        # Ice caps (baked, subtle)
-        ice_a = 95 if planet_type == "Gaia" else 78
-        elements.append(f'  <ellipse cx="{cx}" cy="{cy - r*0.78}" rx="{r*0.30}" ry="{r*0.11}" fill="rgba(232,242,255,{ice_a/255:.2f})" />')
-        elements.append(f'  <ellipse cx="{cx}" cy="{cy + r*0.78}" rx="{r*0.26}" ry="{r*0.09}" fill="rgba(232,242,255,{(ice_a*0.7)/255:.2f})" />')
+            for j in range(num_per_group):
+                fx = gcx + random.uniform(-72, 72)
+                fy = gcy + random.uniform(-55, 55)
+                rx = random.uniform(28, 78)
+                ry = rx * random.uniform(0.45, 0.88)
+                rot = random.randint(-45, 45)
+                col = land_colors[(gi + j) % len(land_colors)]
+                alpha = 232 if not is_gaia else 245
+                elements.append(f'  <ellipse cx="{fx}" cy="{fy}" rx="{rx}" ry="{ry}" fill="{color_str(col, alpha)}" transform="rotate({rot} {fx} {fy})" />')
+                # Extra small overlapping for jagged coast / detail
+                if random.random() > 0.5:
+                    fx2 = fx + random.uniform(-18, 18)
+                    fy2 = fy + random.uniform(-14, 14)
+                    elements.append(f'  <ellipse cx="{fx2}" cy="{fy2}" rx="{rx*0.55}" ry="{ry*0.55}" fill="{color_str(col, alpha-20)}" transform="rotate({rot+15} {fx} {fy})" />')
+        # Ice caps (baked, more prominent on Gaia for "nicer")
+        ice_a = 115 if is_gaia else 85
+        ice_rx = r * (0.34 if is_gaia else 0.30)
+        ice_ry = r * (0.13 if is_gaia else 0.11)
+        elements.append(f'  <ellipse cx="{cx}" cy="{cy - r*0.76}" rx="{ice_rx}" ry="{ice_ry}" fill="rgba(235,245,255,{ice_a/255:.2f})" />')
+        elements.append(f'  <ellipse cx="{cx}" cy="{cy + r*0.76}" rx="{ice_rx * 0.85}" ry="{ice_ry * 0.8}" fill="rgba(235,245,255,{(ice_a*0.75)/255:.2f})" />')
+        # Extra Gaia "lush" touches: small bright green patches (forests/jungles)
+        if is_gaia:
+            for i in range(5):
+                ang = random.uniform(0, 6.2832)
+                dist = random.uniform(0.18, 0.65) * r
+                fx = cx + math.cos(ang) * dist
+                fy = cy + math.sin(ang) * dist * 0.82
+                elements.append(f'  <ellipse cx="{fx}" cy="{fy}" rx="{random.uniform(12,22)}" ry="{random.uniform(8,16)}" fill="rgba(70,195,85,165)" transform="rotate({random.randint(-30,30)} {fx} {fy})" />')
 
     # Subtle fixed haze / high cloud suggestions (very low opacity, will be overpainted by runtime anim clouds)
     if planet_type in ("Gaia", "Terran", "Ocean", "Swamp"):
