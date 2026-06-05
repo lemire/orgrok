@@ -440,25 +440,13 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     float rot = time * 0.008f + (pl.name.length() * 0.4f);   // very slow, clean spin
     float planetRotationDeg = rot * (180.0f / PI);
 
-    // The nice planet from SVG texture as a single clean sphere/disk.
-    // (no extra glow/atm or overlays that could appear as separate components)
+    // The planet from SVG texture — rendered as a SINGLE clean sphere/disk.
+    // All 3D (shading, highlight) is baked into the texture itself. No extra overlapping circles.
     Texture2D ptex = GetPlanetTexture(pl);
     DrawTexturedPlanet(cx, cy, radius, ptex, planetRotationDeg, WHITE);
 
-    // Very subtle terminator for a bit of 3D depth (fixed light, inside the disk)
-    Color base = planetColor(pl.type);
-    Color darkBase = { (uint8_t)(base.r * 0.4f), (uint8_t)(base.g * 0.38f), (uint8_t)(base.b * 0.45f), 255 };
-    DrawCircleV({cx + radius * 0.12f, cy + radius * 0.08f}, radius * 0.97f, Color{darkBase.r, darkBase.g, darkBase.b, 55});
-
-    // Tiny edge accent
-    DrawCircleV({cx, cy}, radius + 0.5f, Color{0, 0, 0, 18});
-
-    // Soft specular highlight (baked in texture too, but this reinforces)
-    DrawCircleV({cx - radius * 0.28f, cy - radius * 0.26f}, radius * 0.22f, Color{255, 255, 255, 30});
-
-    // Subtle focus rings
-    DrawCircleLines(cx, cy, radius + 5.0f, Color{90, 170, 255, 70});
-    DrawCircleLines(cx, cy, radius + 9.0f, Color{60, 130, 200, 40});
+    // Single subtle focus ring (UI, strictly outside the planet disk; no double rings)
+    DrawCircleLines(cx, cy, radius + 6.0f, Color{90, 170, 255, 60});
 }
 
 // === Animated deep space background ===
@@ -1622,11 +1610,10 @@ int main(int argc, char** argv) {
                     // Draw faint orbit
                     DrawCircleLines(cx, cy, orbitRadius, Color{40, 50, 70, 80});
 
-                    // Selection ring if this planet is clicked
+                    // Selection indicator (single subtle ring outside the planet disk, to keep planet as one clean sphere)
                     bool isSelectedPlanet = (i == gSelectedPlanetIndex);
                     if (isSelectedPlanet) {
-                        DrawCircleLines(px, py, pr + 5.0f, Color{120, 200, 255, 200});
-                        DrawCircleLines(px, py, pr + 7.5f, Color{80, 160, 230, 110});
+                        DrawCircleLines(px, py, pr + 4.0f, Color{120, 200, 255, 140});
                     }
 
                     // Draw the planet as a single clean sphere/disk from the SVG texture.

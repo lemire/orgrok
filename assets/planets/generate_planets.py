@@ -220,11 +220,8 @@ def planet_svg(planet_type, variant, seed):
             cyy = cy + math.sin(ca) * cd * 0.48
             elements.append(f'  <circle cx="{cxx}" cy="{cyy}" r="{r * random.uniform(0.32,0.44)}" fill="{haze}" />')
 
-    # Baked soft specular (small, upper left)
-    hl_x = cx - r * 0.33
-    hl_y = cy - r * 0.34
-    elements.append(f'  <circle cx="{hl_x}" cy="{hl_y}" r="{r*0.22}" fill="rgba(255,255,255,0.28)" />')
-    elements.append(f'  <circle cx="{hl_x-4}" cy="{hl_y-6}" r="{r*0.09}" fill="rgba(255,255,255,0.15)" />')
+    # No baked specular here anymore — the radial body gradient provides the 3D sphere shading.
+    # (Previously the offset white circle could look like a detached "light accent" or second component at small scales.)
 
     # Assemble
     svg = f'''<?xml version="1.0" encoding="UTF-8"?>
