@@ -22,6 +22,7 @@
 #include <random>
 #include <string>
 #include <cstdint>
+#include <cstdio>
 #include <format>
 #include <map>
 #include <functional>
@@ -138,6 +139,11 @@ static void PlayUISound() { PlaySound(sfxClick); }
 static ImFont* gFontMain = nullptr;   // body / normal UI text
 static ImFont* gFontTitle = nullptr;  // larger for headers and race names
 
+// === Planet textures loaded from SVG-generated PNGs in assets/planets/textures/ ===
+// One base + variant per PlanetType (stable selection per planet instance)
+static Texture2D gPlanetTextures[9][2] = {{{0}}};
+static bool gPlanetTexturesLoaded = false;
+
 // Building catalog with descriptions (for per-planet buildings screen)
 struct BuildingDef {
     std::string name;
@@ -194,6 +200,105 @@ static Color planetColor(orion::PlanetType type) {
         case PT::Gaia:     return {90, 200, 130, 255};
         default:           return WHITE;
     }
+}
+
+// === Planet texture helpers (SVG-sourced) ===
+
+static std::string planetTypeToAssetName(orion::PlanetType t) {
+    using PT = orion::PlanetType;
+    switch (t) {
+        case PT::Radiated: return "radiated";
+        case PT::Barren:   return "barren";
+        case PT::Desert:   return "desert";
+        case PT::Steppe:   return "steppe";
+        case PT::Arid:     return "arid";
+        case PT::Swamp:    return "swamp";
+        case PT::Ocean:    return "ocean";
+        case PT::Terran:   return "terran";
+        case PT::Gaia:     return "gaia";
+        default:           return "terran";
+    }
+}
+
+static void LoadPlanetTextures() {
+    if (gPlanetTexturesLoaded) return;
+
+    std::vector<std::string> searchDirs;
+    searchDirs.push_back("assets/planets/textures/");
+    searchDirs.push_back("../assets/planets/textures/");
+    searchDirs.push_back("../../assets/planets/textures/");
+
+    const char* appDir = GetApplicationDirectory();
+    if (appDir && appDir[0]) {
+        searchDirs.push_back(std::string(appDir) + "/assets/planets/textures/");
+        searchDirs.push_back(std::string(appDir) + "/../assets/planets/textures/");
+        searchDirs.push_back(std::string(appDir) + "/../../assets/planets/textures/");
+        searchDirs.push_back(std::string(appDir) + "/orion-reborn/assets/planets/textures/");
+    }
+
+    int loadedCount = 0;
+    for (int ti = 0; ti < 9; ++ti) {
+        auto t = static_cast<orion::PlanetType>(ti);
+        std::string tname = planetTypeToAssetName(t);
+        for (int v = 0; v < 2; ++v) {
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "planet_%s_%02d.png", tname.c_str(), v + 1);
+            std::string fname = buf;
+            bool found = false;
+            for (const auto& dir : searchDirs) {
+                std::string full = dir + fname;
+                if (FileExists(full.c_str())) {
+                    gPlanetTextures[ti][v] = LoadTexture(full.c_str());
+                    if (IsTextureValid(gPlanetTextures[ti][v])) {
+                        SetTextureFilter(gPlanetTextures[ti][v], TEXTURE_FILTER_BILINEAR);
+                        ++loadedCount;
+                        found = true;
+                        TraceLog(LOG_INFO, "Loaded planet texture: %s", full.c_str());
+                    } else {
+                        TraceLog(LOG_WARNING, "Failed to ready planet texture: %s", full.c_str());
+                    }
+                    break;
+                }
+            }
+            if (!found) {
+                TraceLog(LOG_WARNING, "Missing planet texture: %s (will use procedural fallback)", fname.c_str());
+            }
+        }
+    }
+    gPlanetTexturesLoaded = true;
+    TraceLog(LOG_INFO, "Planet textures: %d/18 loaded from assets/planets/textures/", loadedCount);
+}
+
+static Texture2D GetPlanetTexture(const orion::Planet& pl) {
+    int ti = static_cast<int>(pl.type);
+    if (ti < 0 || ti >= 9) ti = 7; // Terran fallback
+
+    // Stable variant selection from name + properties (same planet always same art)
+    uint32_t h = 2166136261u; // FNV-ish
+    for (unsigned char c : pl.name) h = (h ^ c) * 16777619u;
+    h ^= static_cast<uint32_t>(pl.size) * 0x9e3779b1u;
+    h ^= static_cast<uint32_t>(pl.type) * 1013904223u;
+    int v = (h % 2u);
+
+    Texture2D tex = gPlanetTextures[ti][v];
+    if (IsTextureValid(tex)) return tex;
+    tex = gPlanetTextures[ti][1 - v];
+    if (IsTextureValid(tex)) return tex;
+    return {0};
+}
+
+// Draw a planet texture centered at (x,y) with given on-screen radius (supports rotation for animation)
+static void DrawTexturedPlanet(float x, float y, float radius, Texture2D tex, float rotationDeg = 0.0f, Color tint = WHITE) {
+    if (!IsTextureValid(tex)) {
+        DrawCircleV({x, y}, radius, tint);
+        DrawCircleV({x - radius*0.28f, y - radius*0.26f}, radius * 0.32f, Color{255,255,255,40});
+        return;
+    }
+    float texSize = (float)tex.width;
+    Rectangle srcRec = { 0.0f, 0.0f, texSize, texSize };
+    Rectangle dstRec = { x - radius, y - radius, 2.0f * radius, 2.0f * radius };
+    Vector2 origin = { 0.0f, 0.0f };
+    DrawTexturePro(tex, srcRec, dstRec, origin, rotationDeg, tint);
 }
 
 // Draw a visually distinct star with spectral-type variety (no textures)
@@ -325,11 +430,10 @@ static void DrawStarVaried(float x, float y, float zoom, bool owned, bool select
 // =====================================================================================
 // Called when the player drills down into a specific planet.
 // Features:
-// - Type-specific base colors, atmosphere, and surface features
-// - Slow rotation animation
-// - Population-driven city lights (density + twinkling)
-// - Cloud / haze layers
-// - Special effects per planet type (lava, ice caps, storms, etc.)
+// - SVG-sourced planet textures for ALL planet types (Radiated..Gaia) + variants
+// - Slow rotation animation of the textured surface
+// - Population-driven city lights (density + twinkling) overlaid
+// - Animated cloud / haze layers + type special effects (lava, ice caps, aurora, etc.)
 // - Hooks for future building visualization (factories, shields, etc.)
 static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
                                        const orion::Planet& pl,
@@ -344,12 +448,10 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     // === Base color from planet type (richer palette) ===
     Color base = planetColor(pl.type);
     Color darkBase = { (uint8_t)(base.r * 0.45f), (uint8_t)(base.g * 0.42f), (uint8_t)(base.b * 0.48f), 255 };
-    Color brightBase = { (uint8_t)std::min(255, (int)(base.r * 1.25f)),
-                         (uint8_t)std::min(255, (int)(base.g * 1.2f)),
-                         (uint8_t)std::min(255, (int)(base.b * 1.15f)), 255 };
 
-    // Subtle rotation offset for the whole planet
+    // Subtle rotation offset for the whole planet (used for overlays + texture)
     float rot = time * 0.035f + (pl.name.length() * 0.4f);   // stable per planet
+    float planetRotationDeg = rot * (180.0f / PI);
 
     // 1. Soft outer atmosphere glow (bigger for thicker atmospheres)
     float atmSize = radius * (pl.type >= PT::Ocean ? 1.28f : 1.15f);
@@ -358,38 +460,18 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
                      (pl.type <= PT::Barren) ? Color{180, 140, 90, 38} : Color{140, 130, 160, 42};
     DrawCircleV({cx, cy}, atmSize, atmColor);
 
-    // 2. Main planet body
-    DrawCircleV({cx, cy}, radius, base);
+    // 2. Main planet body - now using beautiful SVG-derived texture (covers all planet types)
+    Texture2D ptex = GetPlanetTexture(pl);
+    DrawTexturedPlanet(cx, cy, radius, ptex, planetRotationDeg, WHITE);
 
-    // 3. Simple "terminator" shading (fake 3D lighting from upper-left)
-    // Draw a slightly offset darker circle on the "night" side
-    float shadeOffsetX = radius * 0.18f;
-    float shadeOffsetY = radius * 0.12f;
-    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.96f, Color{darkBase.r, darkBase.g, darkBase.b, 165});
+    // 3. Subtle dynamic terminator shading (adds sense of light direction on top of baked SVG lighting)
+    float shadeOffsetX = radius * 0.16f;
+    float shadeOffsetY = radius * 0.11f;
+    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.97f, Color{darkBase.r, darkBase.g, darkBase.b, 92});
 
-    // 4. Surface details + rotation (procedural "continents" / features)
     int featureSeed = (int)pl.name.length() * 31 + static_cast<int>(pl.size) * 7 + static_cast<int>(pl.type) * 3;
 
-    // Draw a few rotating "landmass" or surface blobs using offset circles
-    for (int f = 0; f < 5; ++f) {
-        float fAngle = rot * (0.6f + (f % 3) * 0.15f) + (f * 1.8f) + (featureSeed % 7);
-        float dist = radius * (0.28f + (f % 4) * 0.07f);
-        float fx = cx + cosf(fAngle) * dist;
-        float fy = cy + sinf(fAngle) * dist * 0.82f;
-
-        float fSize = radius * (0.22f + (f % 3) * 0.06f);
-        Color fCol = (pl.type >= PT::Ocean && pl.type != PT::Swamp) ?
-                     Color{ (uint8_t)(base.r * 0.7f), (uint8_t)(base.g * 0.85f), (uint8_t)(base.b * 0.6f), 110 } :
-                     Color{ (uint8_t)(base.r * 0.55f), (uint8_t)(base.g * 0.5f), (uint8_t)(base.b * 0.55f), 95 };
-
-        if (pl.type == PT::Radiated || pl.type == PT::Barren) {
-            fCol = {90, 75, 60, 120}; // crater-like
-            DrawCircleV({fx, fy}, fSize * 0.6f, fCol);
-            DrawCircleLines(fx, fy, fSize * 0.65f, Color{60, 50, 40, 160});
-        } else {
-            DrawCircleV({fx, fy}, fSize, fCol);
-        }
-    }
+    // (old procedural surface blobs removed - SVG textures now provide rich type-specific detail for all 9 planet types)
 
     // 5. Cloud / haze layer (rotates at different speed)
     if (pl.type >= PT::Arid) {
@@ -1138,6 +1220,9 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Load planet artwork (SVG rasterized PNGs) - robust path search like fonts
+    LoadPlanetTextures();
+
     // Main game loop
     while (!WindowShouldClose()) {
         // === Race Selection Menu (Phase 2) ===
@@ -1649,11 +1734,13 @@ int main(int argc, char** argv) {
                         DrawCircleLines(px, py, pr + 7.5f, Color{80, 160, 230, 110});
                     }
 
-                    // Draw the planet
-                    DrawCircleV({px, py}, pr, pc);
+                    // Draw the planet (SVG texture with slow rotation for life)
+                    Texture2D ptex = GetPlanetTexture(pl);
+                    float prot = (float)(pl.name.length() * 11 + i * 7) + (float)(GetTime() * (0.6f + (i % 4) * 0.12f));
+                    DrawTexturedPlanet(px, py, pr, ptex, prot, WHITE);
 
-                    // Simple highlight
-                    DrawCircleV({px - pr*0.3f, py - pr*0.25f}, pr * 0.4f, Color{255,255,255,45});
+                    // Subtle highlight on top (works for both textured + fallback)
+                    DrawCircleV({px - pr*0.3f, py - pr*0.25f}, pr * 0.38f, Color{255,255,255,38});
 
                     // Gas giant rings
                     bool gasGiant = (pl.type == orion::PlanetType::Swamp || pl.type == orion::PlanetType::Ocean) && pr > 7.0f;
@@ -3174,6 +3261,16 @@ void DrawEndOfTurnReportWindow();
     UnloadSound(sfxShipOrder);
     UnloadSound(sfxColonize);
     UnloadSound(sfxEvent);
+
+    // Unload planet textures
+    for (int ti = 0; ti < 9; ++ti) {
+        for (int v = 0; v < 2; ++v) {
+            if (IsTextureValid(gPlanetTextures[ti][v])) {
+                UnloadTexture(gPlanetTextures[ti][v]);
+            }
+        }
+    }
+
     CloseAudioDevice();
     rlImGuiShutdown();
     CloseWindow();

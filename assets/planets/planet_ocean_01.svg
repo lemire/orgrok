@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bodyGrad1" cx="42%" cy="38%" r="62%" fx="40%" fy="35%">
+      <stop offset="0%" stop-color="rgb(80,130,200)"/>
+      <stop offset="55%" stop-color="rgb(55,105,175)"/>
+      <stop offset="100%" stop-color="rgb(30,55,105)"/>
+    </radialGradient>
+    <radialGradient id="shade1" cx="50%" cy="50%" r="50%" fx="40%" fy="35%">
+      <stop offset="0%" stop-color="rgba(0,0,0,0.0)"/>
+      <stop offset="70%" stop-color="rgba(0,0,0,0.55)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.78)"/>
+    </radialGradient>
+  </defs>
+  <!-- Ocean planet (variant 1) - generated for orion-reborn -->
+  <circle cx="256" cy="256" r="259.59999999999997" fill="rgba(80,140,210,0.22)" />
+  <circle cx="256" cy="256" r="220" fill="url(#bodyGrad1)" />
+  <ellipse cx="304.4" cy="295.6" rx="211.2" ry="211.2" fill="url(#shade1)" />
+  <ellipse cx="215.022292572268" cy="366.6774824900383" rx="32.10298622463105" ry="16.524287277057457" fill="rgba(113,135,69,0.86)" transform="rotate(-36 215.022292572268 366.6774824900383)" />
+  <ellipse cx="227.8634870621204" cy="363.3726250346268" rx="14.446343801083975" ry="6.609714910822984" fill="rgba(113,135,69,0.86)" transform="rotate(-16 215.022292572268 366.6774824900383)" />
+  <ellipse cx="308.1625913428763" cy="196.61045098723056" rx="34.28423106405903" ry="21.00165587850954" fill="rgba(113,135,69,0.86)" transform="rotate(29 308.1625913428763 196.61045098723056)" />
+  <ellipse cx="240.4729627809648" cy="320.80263684896374" rx="48.63480573135621" ry="29.455751652710894" fill="rgba(113,135,69,0.86)" transform="rotate(-5 240.4729627809648 320.80263684896374)" />
+  <ellipse cx="259.92688507350726" cy="314.91148651842155" rx="21.885662579110296" ry="11.782300661084358" fill="rgba(113,135,69,0.86)" transform="rotate(15 240.4729627809648 320.80263684896374)" />
+  <ellipse cx="293.88663689438954" cy="304.11915913700875" rx="65.03195830941957" ry="43.60766151534686" fill="rgba(113,135,69,0.86)" transform="rotate(-6 293.88663689438954 304.11915913700875)" />
+  <ellipse cx="313.2399993634897" cy="276.1011704738636" rx="42.9046449751536" ry="28.257836899254688" fill="rgba(113,135,69,0.86)" transform="rotate(44 313.2399993634897 276.1011704738636)" />
+  <path d="M 91.0,179.0 Q 201.0,171.0 421.0,183.0" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3.5" />
+  <path d="M 91.0,227.4 Q 201.0,219.4 421.0,231.4" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3.5" />
+  <path d="M 91.0,275.8 Q 201.0,267.8 421.0,279.8" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3.5" />
+  <path d="M 91.0,324.2 Q 201.0,316.2 421.0,328.2" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3.5" />
+  <circle cx="243.98389597029467" cy="230.92033100748557" r="105.21255390864815" fill="rgba(255,255,255,0.38)" />
+  <circle cx="183.26763908682858" cy="250.6381891868374" r="100.35590776371457" fill="rgba(255,255,255,0.38)" />
+  <circle cx="190.0" cy="185.6" r="57.2" fill="rgba(255,255,255,0.32)" />
+  <circle cx="184.0" cy="177.6" r="24.024" fill="rgba(255,255,255,0.18)" />
+</svg>
