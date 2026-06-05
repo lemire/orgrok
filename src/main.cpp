@@ -291,7 +291,6 @@ static Texture2D GetPlanetTexture(const orion::Planet& pl) {
 static void DrawTexturedPlanet(float x, float y, float radius, Texture2D tex, float rotationDeg = 0.0f, Color tint = WHITE) {
     if (!IsTextureValid(tex)) {
         DrawCircleV({x, y}, radius, tint);
-        DrawCircleV({x - radius*0.28f, y - radius*0.26f}, radius * 0.32f, Color{255,255,255,40});
         return;
     }
     float texSize = (float)tex.width;
@@ -441,18 +440,12 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     float rot = time * 0.008f + (pl.name.length() * 0.4f);   // very slow, clean spin
     float planetRotationDeg = rot * (180.0f / PI);
 
-    // Simple soft atmosphere glow (subtle, circular)
-    float atmSize = radius * (pl.type >= PT::Ocean ? 1.18f : 1.10f);
-    Color atmColor = (pl.type == PT::Gaia)   ? Color{110, 255, 160, 40} :
-                     (pl.type >= PT::Ocean)  ? Color{80, 150, 255, 35} :
-                     (pl.type <= PT::Barren) ? Color{160, 120, 80, 28} : Color{120, 110, 140, 30};
-    DrawCircleV({cx, cy}, atmSize, atmColor);
-
-    // The nice planet from SVG texture -- this is what rotates slowly. Nothing else.
+    // The nice planet from SVG texture as a single clean sphere/disk.
+    // (no extra glow/atm or overlays that could appear as separate components)
     Texture2D ptex = GetPlanetTexture(pl);
     DrawTexturedPlanet(cx, cy, radius, ptex, planetRotationDeg, WHITE);
 
-    // Very subtle terminator for a bit of 3D depth (fixed light)
+    // Very subtle terminator for a bit of 3D depth (fixed light, inside the disk)
     Color base = planetColor(pl.type);
     Color darkBase = { (uint8_t)(base.r * 0.4f), (uint8_t)(base.g * 0.38f), (uint8_t)(base.b * 0.45f), 255 };
     DrawCircleV({cx + radius * 0.12f, cy + radius * 0.08f}, radius * 0.97f, Color{darkBase.r, darkBase.g, darkBase.b, 55});
@@ -460,7 +453,7 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     // Tiny edge accent
     DrawCircleV({cx, cy}, radius + 0.5f, Color{0, 0, 0, 18});
 
-    // Soft specular highlight (always on the "lit" side)
+    // Soft specular highlight (baked in texture too, but this reinforces)
     DrawCircleV({cx - radius * 0.28f, cy - radius * 0.26f}, radius * 0.22f, Color{255, 255, 255, 30});
 
     // Subtle focus rings
@@ -1636,13 +1629,11 @@ int main(int argc, char** argv) {
                         DrawCircleLines(px, py, pr + 7.5f, Color{80, 160, 230, 110});
                     }
 
-                    // Draw the planet (SVG texture with slow rotation for life)
+                    // Draw the planet as a single clean sphere/disk from the SVG texture.
+                    // (baked highlight/shading in the texture itself; no extra overlay circles that could look like separate components)
                     Texture2D ptex = GetPlanetTexture(pl);
                     float prot = (float)(pl.name.length() * 11 + i * 7) + (float)(GetTime() * (0.6f + (i % 4) * 0.12f));
                     DrawTexturedPlanet(px, py, pr, ptex, prot, WHITE);
-
-                    // Subtle highlight on top (works for both textured + fallback)
-                    DrawCircleV({px - pr*0.3f, py - pr*0.25f}, pr * 0.38f, Color{255,255,255,38});
 
                     // Gas giant rings
                     bool gasGiant = (pl.type == orion::PlanetType::Swamp || pl.type == orion::PlanetType::Ocean) && pr > 7.0f;
@@ -1650,10 +1641,9 @@ int main(int argc, char** argv) {
                         DrawEllipseLines(px, py, pr * 1.9f, pr * 0.6f, Color{pc.r, pc.g, pc.b, 130});
                     }
 
-                    // Colonized indicator
+                    // Colonized indicator (thin ring only, to keep the planet as a single clean disk)
                     if (pl.isColonized()) {
                         DrawCircleLines(px, py, pr + 3.0f, Color{255, 230, 140, 220});
-                        DrawCircleV({px + pr*0.35f, py - pr*0.2f}, 1.8f, Color{255, 255, 220, 255});
                     }
                 }
 
