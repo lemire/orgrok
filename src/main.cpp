@@ -426,15 +426,10 @@ static void DrawStarVaried(float x, float y, float zoom, bool owned, bool select
 }
 
 // =====================================================================================
-// Detailed Animated Planet View (new immersive colony surface visualization)
+// Simple rotating planet close-up (shown when clicking a planet in system view)
 // =====================================================================================
-// Called when the player drills down into a specific planet.
-// Features:
-// - SVG-sourced planet textures for ALL planet types (Radiated..Gaia) + variants
-// - Slow rotation animation of the textured surface
-// - Population-driven city lights (density + twinkling) overlaid
-// - Animated cloud / haze layers + type special effects (lava, ice caps, aurora, etc.)
-// - Hooks for future building visualization (factories, shields, etc.)
+// Just the SVG planet texture, slowly rotating as a whole. Minimal effects so it reads
+// cleanly as a single nice planet (no extra "orbiting" elements or busy overlays).
 static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
                                        const orion::Planet& pl,
                                        float population,
@@ -442,131 +437,35 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
                                        float time) {
     using PT = orion::PlanetType;
 
-    const float popRatio = maxPopulation > 0.1f ? (population / maxPopulation) : 0.0f;
-    const float popFactor = std::clamp(popRatio * popRatio * 1.15f, 0.0f, 1.0f); // more lights at high pop
-
-    // === Base color from planet type (richer palette) ===
-    Color base = planetColor(pl.type);
-    Color darkBase = { (uint8_t)(base.r * 0.45f), (uint8_t)(base.g * 0.42f), (uint8_t)(base.b * 0.48f), 255 };
-
-    // Subtle rotation offset for the whole planet (used for overlays + texture)
-    // Slowed down for clarity: this is the planet spinning on its axis, not something orbiting a star.
-    float rot = time * 0.012f + (pl.name.length() * 0.4f);   // stable per planet, slow majestic spin
+    // Slow rotation for the planet itself (the whole textured globe spins slowly)
+    float rot = time * 0.008f + (pl.name.length() * 0.4f);   // very slow, clean spin
     float planetRotationDeg = rot * (180.0f / PI);
 
-    // 1. Soft outer atmosphere glow (perfect circle, runtime only - SVGs no longer bake outer glow)
-    float atmSize = radius * (pl.type >= PT::Ocean ? 1.22f : 1.12f);
-    Color atmColor = (pl.type == PT::Gaia)   ? Color{115, 255, 165, 48} :
-                     (pl.type >= PT::Ocean)  ? Color{85, 155, 255, 42} :
-                     (pl.type <= PT::Barren) ? Color{170, 130, 85, 32} : Color{130, 120, 150, 36};
+    // Simple soft atmosphere glow (subtle, circular)
+    float atmSize = radius * (pl.type >= PT::Ocean ? 1.18f : 1.10f);
+    Color atmColor = (pl.type == PT::Gaia)   ? Color{110, 255, 160, 40} :
+                     (pl.type >= PT::Ocean)  ? Color{80, 150, 255, 35} :
+                     (pl.type <= PT::Barren) ? Color{160, 120, 80, 28} : Color{120, 110, 140, 30};
     DrawCircleV({cx, cy}, atmSize, atmColor);
 
-    // 2. Main planet body from improved SVG texture (tight circular content, transparent margins)
+    // The nice planet from SVG texture -- this is what rotates slowly. Nothing else.
     Texture2D ptex = GetPlanetTexture(pl);
     DrawTexturedPlanet(cx, cy, radius, ptex, planetRotationDeg, WHITE);
 
-    // 3. Dynamic terminator shading (fixed lighting direction for 3D pop; no baked shade in SVGs)
-    float shadeOffsetX = radius * 0.15f;
-    float shadeOffsetY = radius * 0.10f;
-    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.985f, Color{darkBase.r, darkBase.g, darkBase.b, 78});
+    // Very subtle terminator for a bit of 3D depth (fixed light)
+    Color base = planetColor(pl.type);
+    Color darkBase = { (uint8_t)(base.r * 0.4f), (uint8_t)(base.g * 0.38f), (uint8_t)(base.b * 0.45f), 255 };
+    DrawCircleV({cx + radius * 0.12f, cy + radius * 0.08f}, radius * 0.97f, Color{darkBase.r, darkBase.g, darkBase.b, 55});
 
-    // Subtle edge definition to help planet read as a globe (on top of texture)
-    DrawCircleV({cx, cy}, radius + 0.6f, Color{0, 0, 0, 22});
+    // Tiny edge accent
+    DrawCircleV({cx, cy}, radius + 0.5f, Color{0, 0, 0, 18});
 
-    int featureSeed = (int)pl.name.length() * 31 + static_cast<int>(pl.size) * 7 + static_cast<int>(pl.type) * 3;
+    // Soft specular highlight (always on the "lit" side)
+    DrawCircleV({cx - radius * 0.28f, cy - radius * 0.26f}, radius * 0.22f, Color{255, 255, 255, 30});
 
-    // 5. Cloud / haze layer (smaller, closer to disk so they don't read as separate orbs)
-    if (pl.type >= PT::Arid) {
-        float cloudRot = time * 0.055f + (featureSeed * 0.3f);
-        Color cloudCol = (pl.type == PT::Gaia) ? Color{255, 255, 255, 46} :
-                         (pl.type >= PT::Ocean) ? Color{235, 245, 255, 40} : Color{220, 210, 190, 34};
-
-        for (int c = 0; c < 3; ++c) {
-            float ca = cloudRot + c * 2.1f;
-            float cd = radius * (0.32f + c * 0.08f);
-            float cloudX = cx + cosf(ca) * cd * 0.6f;
-            float cloudY = cy + sinf(ca * 0.7f) * cd * 0.48f;
-            float cloudR = radius * (0.38f + (c % 2) * 0.08f);
-            DrawCircleV({cloudX, cloudY}, cloudR, cloudCol);
-        }
-    }
-
-    // 6. City lights / civilization (population driven, on the night side)
-    if (popFactor > 0.02f) {
-        int lightCount = (int)(popFactor * 38.0f) + (population > 4.0f ? 6 : 0);
-        for (int l = 0; l < lightCount; ++l) {
-            // Use stable "random" positions based on planet + light index
-            uint32_t h = (featureSeed * 31u + l * 17u + (uint32_t)(time * 0.3f)) % 360;
-            float la = (h * 0.01745f) + rot * 0.9f;   // rotate with planet
-
-            // Bias lights toward the "night" side (roughly right side in our fake lighting)
-            float lx = cx + cosf(la) * (radius * 0.72f);
-            float ly = cy + sinf(la) * (radius * 0.62f);
-
-            // Only draw lights on the darker half
-            float lightSide = cosf(la - 0.8f); // rough night side test
-            if (lightSide < 0.35f) {
-                float twinkle = 0.65f + 0.35f * sinf(time * 3.8f + l * 1.7f + featureSeed);
-                float lsize = 1.1f + (popFactor * 1.6f) * (0.6f + (l % 3) * 0.2f);
-
-                Color lightCol = (pl.type == PT::Gaia) ? Color{180, 255, 200, (uint8_t)(200 * twinkle)} :
-                                 (pl.type >= PT::Ocean) ? Color{160, 210, 255, (uint8_t)(185 * twinkle)} :
-                                 Color{255, 220, 120, (uint8_t)(210 * twinkle)};
-
-                DrawCircleV({lx, ly}, lsize, lightCol);
-
-                // Occasional brighter core
-                if ((l % 3) == 0) {
-                    DrawCircleV({lx, ly}, lsize * 0.45f, Color{255, 255, 240, (uint8_t)(120 * twinkle)});
-                }
-            }
-        }
-    }
-
-    // 7. Type-specific special effects
-    if (pl.type == PT::Radiated) {
-        // Lava / radioactive glow cracks
-        for (int v = 0; v < 4; ++v) {
-            float va = rot * 0.8f + v * 1.6f;
-            float vx = cx + cosf(va) * radius * 0.6f;
-            float vy = cy + sinf(va) * radius * 0.52f;
-            Color lava = {255, 80, 30, (uint8_t)(90 + 40 * sinf(time * 4.0f + v))};
-            DrawCircleV({vx, vy}, 2.2f + sinf(time + v) * 0.8f, lava);
-        }
-    }
-
-    if (pl.type == PT::Gaia || pl.type == PT::Terran) {
-        // Gentle aurora / life shimmer near poles (tight)
-        float auroraPhase = sinf(time * 0.7f) * 0.5f + 0.5f;
-        DrawCircleV({cx - radius * 0.22f, cy - radius * 0.72f}, radius * 0.16f,
-                    Color{120, 255, 180, (uint8_t)(32 * auroraPhase)});
-        DrawCircleV({cx + radius * 0.18f, cy + radius * 0.71f}, radius * 0.13f,
-                    Color{140, 230, 255, (uint8_t)(26 * auroraPhase)});
-    }
-
-    if (pl.type <= PT::Desert && pl.type != PT::Swamp) {
-        // Ice caps / polar regions (pulled in, smaller so they sit on the globe, not separate)
-        float iceAlpha = (pl.type == PT::Radiated) ? 28 : 58;
-        DrawCircleV({cx, cy - radius * 0.71f}, radius * 0.21f, Color{235, 245, 255, (uint8_t)iceAlpha});
-        DrawCircleV({cx, cy + radius * 0.71f}, radius * 0.17f, Color{235, 245, 255, (uint8_t)(iceAlpha * 0.75f)});
-    }
-
-    // 8. Final bright highlight (specular)
-    DrawCircleV({cx - radius * 0.32f, cy - radius * 0.30f}, radius * 0.28f, Color{255, 255, 255, 38});
-
-    // 9. Subtle surface grid / texture suggestion at high population (future building hint)
-    if (popFactor > 0.45f) {
-        for (int g = 0; g < 7; ++g) {
-            float ga = rot * 0.4f + g * 0.9f;
-            float gx = cx + cosf(ga) * radius * 0.55f;
-            float gy = cy + sinf(ga) * radius * 0.48f;
-            DrawCircleLines(gx, gy, 1.5f, Color{255, 255, 255, 22});
-        }
-    }
-
-    // Selection / focus ring
-    DrawCircleLines(cx, cy, radius + 6.0f, Color{100, 180, 255, 80});
-    DrawCircleLines(cx, cy, radius + 10.0f, Color{70, 140, 210, 45});
+    // Subtle focus rings
+    DrawCircleLines(cx, cy, radius + 5.0f, Color{90, 170, 255, 70});
+    DrawCircleLines(cx, cy, radius + 9.0f, Color{60, 130, 200, 40});
 }
 
 // === Animated deep space background ===
@@ -1661,22 +1560,12 @@ int main(int argc, char** argv) {
                 float time = static_cast<float>(GetTime());
                 float planetRadius = 135.0f;   // Nice large size for detail
 
-                // Draw the beautiful animated planet (positioned to leave room for left UI panel while feeling central)
+                // Just the planet, slowly rotating. Clean and simple.
                 float planetDrawX = screenW * 0.55f;
                 DrawDetailedAnimatedPlanet(planetDrawX, screenH * 0.52f, planetRadius,
                                            planet, pop, maxPop, time);
 
-                // Clear explanatory labels so it's obvious this is a close-up of ONE planet's surface (not a star + orbiting planet)
-                DrawTextEx(GetFontDefault(),
-                           "PLANET SURFACE VIEW",
-                           {planetDrawX - 130, screenH * 0.52f - planetRadius - 45},
-                           22.0f, 1.0f, Color{180, 210, 255, 255});
-                DrawTextEx(GetFontDefault(),
-                           "(globe slowly rotates to reveal surface; fixed lighting from upper-left)",
-                           {planetDrawX - 200, screenH * 0.52f - planetRadius - 22},
-                           13.0f, 1.0f, Color{150, 170, 200, 200});
-
-                // Subtle label under the planet
+                // Minimal label
                 DrawTextEx(GetFontDefault(),
                            TextFormat("%s  •  %s  •  Pop %.1fM",
                                       planet.name.c_str(),
@@ -2627,7 +2516,7 @@ int main(int argc, char** argv) {
 
 //                 ImGui::Separator();
         // ==================== Star System Menu (when inside a system) ====================
-        // Hide when drilled into a planet so the immersive view + Planet Surface panel are the focus.
+        // Hide when in planet detail view (only the planet + its colony panel should be visible).
         if (gInSystemView && !gInPlanetView) {
             auto* viewedSys = gGameState.galaxy.findSystemById(gViewedSystemId);
             if (viewedSys) {
@@ -2768,11 +2657,7 @@ int main(int argc, char** argv) {
 
                 ImGui::SetNextWindowPos(ImVec2(30, 40), ImGuiCond_FirstUseEver);
                 ImGui::SetNextWindowSize(ImVec2(420, 480), ImGuiCond_FirstUseEver);
-                ImGui::Begin("Planet Surface", nullptr, ImGuiWindowFlags_NoCollapse);
-
-                ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "CLOSE-UP VIEW - Planet slowly rotating on axis");
-                ImGui::TextWrapped("The large sphere is the planet you clicked. Blue = oceans/water; green/brown = continents/land (Terran/Gaia). Surface features drift as the globe spins under fixed lighting. Not a star + orbiting body.");
-                ImGui::Separator();
+                ImGui::Begin(planet.name.c_str(), nullptr, ImGuiWindowFlags_NoCollapse);
 
                 ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "%s", planet.name.c_str());
                 ImGui::SameLine();
