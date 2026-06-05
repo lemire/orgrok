@@ -450,7 +450,8 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     Color darkBase = { (uint8_t)(base.r * 0.45f), (uint8_t)(base.g * 0.42f), (uint8_t)(base.b * 0.48f), 255 };
 
     // Subtle rotation offset for the whole planet (used for overlays + texture)
-    float rot = time * 0.035f + (pl.name.length() * 0.4f);   // stable per planet
+    // Slowed down for clarity: this is the planet spinning on its axis, not something orbiting a star.
+    float rot = time * 0.012f + (pl.name.length() * 0.4f);   // stable per planet, slow majestic spin
     float planetRotationDeg = rot * (180.0f / PI);
 
     // 1. Soft outer atmosphere glow (perfect circle, runtime only - SVGs no longer bake outer glow)
@@ -1660,9 +1661,20 @@ int main(int argc, char** argv) {
                 float time = static_cast<float>(GetTime());
                 float planetRadius = 135.0f;   // Nice large size for detail
 
-                // Draw the beautiful animated planet centered
-                DrawDetailedAnimatedPlanet(screenW * 0.42f, screenH * 0.52f, planetRadius,
+                // Draw the beautiful animated planet (positioned to leave room for left UI panel while feeling central)
+                float planetDrawX = screenW * 0.55f;
+                DrawDetailedAnimatedPlanet(planetDrawX, screenH * 0.52f, planetRadius,
                                            planet, pop, maxPop, time);
+
+                // Clear explanatory labels so it's obvious this is a close-up of ONE planet's surface (not a star + orbiting planet)
+                DrawTextEx(GetFontDefault(),
+                           "PLANET SURFACE VIEW",
+                           {planetDrawX - 130, screenH * 0.52f - planetRadius - 45},
+                           22.0f, 1.0f, Color{180, 210, 255, 255});
+                DrawTextEx(GetFontDefault(),
+                           "(globe slowly rotates to reveal surface; fixed lighting from upper-left)",
+                           {planetDrawX - 200, screenH * 0.52f - planetRadius - 22},
+                           13.0f, 1.0f, Color{150, 170, 200, 200});
 
                 // Subtle label under the planet
                 DrawTextEx(GetFontDefault(),
@@ -1670,7 +1682,7 @@ int main(int argc, char** argv) {
                                       planet.name.c_str(),
                                       to_string(planet.type).data(),
                                       pop),
-                           {screenW * 0.42f - 140, screenH * 0.52f + planetRadius + 18},
+                           {planetDrawX - 140, screenH * 0.52f + planetRadius + 18},
                            18.0f, 1.0f, Color{200, 210, 230, 230});
             }
         } else if (gInSystemView) {
@@ -2757,6 +2769,10 @@ int main(int argc, char** argv) {
                 ImGui::SetNextWindowPos(ImVec2(30, 40), ImGuiCond_FirstUseEver);
                 ImGui::SetNextWindowSize(ImVec2(420, 480), ImGuiCond_FirstUseEver);
                 ImGui::Begin("Planet Surface", nullptr, ImGuiWindowFlags_NoCollapse);
+
+                ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "CLOSE-UP VIEW - Planet slowly rotating on axis");
+                ImGui::TextWrapped("The large sphere is the planet you clicked. Blue = oceans/water; green/brown = continents/land (Terran/Gaia). Surface features drift as the globe spins under fixed lighting. Not a star + orbiting body.");
+                ImGui::Separator();
 
                 ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "%s", planet.name.c_str());
                 ImGui::SameLine();
