@@ -453,38 +453,39 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     float rot = time * 0.035f + (pl.name.length() * 0.4f);   // stable per planet
     float planetRotationDeg = rot * (180.0f / PI);
 
-    // 1. Soft outer atmosphere glow (bigger for thicker atmospheres)
-    float atmSize = radius * (pl.type >= PT::Ocean ? 1.28f : 1.15f);
-    Color atmColor = (pl.type == PT::Gaia)   ? Color{120, 255, 170, 55} :
-                     (pl.type >= PT::Ocean)  ? Color{90, 160, 255, 48} :
-                     (pl.type <= PT::Barren) ? Color{180, 140, 90, 38} : Color{140, 130, 160, 42};
+    // 1. Soft outer atmosphere glow (perfect circle, runtime only - SVGs no longer bake outer glow)
+    float atmSize = radius * (pl.type >= PT::Ocean ? 1.22f : 1.12f);
+    Color atmColor = (pl.type == PT::Gaia)   ? Color{115, 255, 165, 48} :
+                     (pl.type >= PT::Ocean)  ? Color{85, 155, 255, 42} :
+                     (pl.type <= PT::Barren) ? Color{170, 130, 85, 32} : Color{130, 120, 150, 36};
     DrawCircleV({cx, cy}, atmSize, atmColor);
 
-    // 2. Main planet body - now using beautiful SVG-derived texture (covers all planet types)
+    // 2. Main planet body from improved SVG texture (tight circular content, transparent margins)
     Texture2D ptex = GetPlanetTexture(pl);
     DrawTexturedPlanet(cx, cy, radius, ptex, planetRotationDeg, WHITE);
 
-    // 3. Subtle dynamic terminator shading (adds sense of light direction on top of baked SVG lighting)
-    float shadeOffsetX = radius * 0.16f;
-    float shadeOffsetY = radius * 0.11f;
-    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.97f, Color{darkBase.r, darkBase.g, darkBase.b, 92});
+    // 3. Dynamic terminator shading (fixed lighting direction for 3D pop; no baked shade in SVGs)
+    float shadeOffsetX = radius * 0.15f;
+    float shadeOffsetY = radius * 0.10f;
+    DrawCircleV({cx + shadeOffsetX, cy + shadeOffsetY}, radius * 0.985f, Color{darkBase.r, darkBase.g, darkBase.b, 78});
+
+    // Subtle edge definition to help planet read as a globe (on top of texture)
+    DrawCircleV({cx, cy}, radius + 0.6f, Color{0, 0, 0, 22});
 
     int featureSeed = (int)pl.name.length() * 31 + static_cast<int>(pl.size) * 7 + static_cast<int>(pl.type) * 3;
 
-    // (old procedural surface blobs removed - SVG textures now provide rich type-specific detail for all 9 planet types)
-
-    // 5. Cloud / haze layer (rotates at different speed)
+    // 5. Cloud / haze layer (smaller, closer to disk so they don't read as separate orbs)
     if (pl.type >= PT::Arid) {
         float cloudRot = time * 0.055f + (featureSeed * 0.3f);
-        Color cloudCol = (pl.type == PT::Gaia) ? Color{255, 255, 255, 58} :
-                         (pl.type >= PT::Ocean) ? Color{235, 245, 255, 52} : Color{220, 210, 190, 45};
+        Color cloudCol = (pl.type == PT::Gaia) ? Color{255, 255, 255, 46} :
+                         (pl.type >= PT::Ocean) ? Color{235, 245, 255, 40} : Color{220, 210, 190, 34};
 
         for (int c = 0; c < 3; ++c) {
             float ca = cloudRot + c * 2.1f;
-            float cd = radius * (0.45f + c * 0.12f);
-            float cloudX = cx + cosf(ca) * cd * 0.7f;
-            float cloudY = cy + sinf(ca * 0.7f) * cd * 0.55f;
-            float cloudR = radius * (0.55f + (c % 2) * 0.15f);
+            float cd = radius * (0.32f + c * 0.08f);
+            float cloudX = cx + cosf(ca) * cd * 0.6f;
+            float cloudY = cy + sinf(ca * 0.7f) * cd * 0.48f;
+            float cloudR = radius * (0.38f + (c % 2) * 0.08f);
             DrawCircleV({cloudX, cloudY}, cloudR, cloudCol);
         }
     }
@@ -534,19 +535,19 @@ static void DrawDetailedAnimatedPlanet(float cx, float cy, float radius,
     }
 
     if (pl.type == PT::Gaia || pl.type == PT::Terran) {
-        // Gentle aurora / life shimmer near poles
+        // Gentle aurora / life shimmer near poles (tight)
         float auroraPhase = sinf(time * 0.7f) * 0.5f + 0.5f;
-        DrawCircleV({cx - radius * 0.3f, cy - radius * 0.65f}, radius * 0.22f,
-                    Color{120, 255, 180, (uint8_t)(35 * auroraPhase)});
-        DrawCircleV({cx + radius * 0.25f, cy + radius * 0.68f}, radius * 0.18f,
-                    Color{140, 230, 255, (uint8_t)(28 * auroraPhase)});
+        DrawCircleV({cx - radius * 0.22f, cy - radius * 0.72f}, radius * 0.16f,
+                    Color{120, 255, 180, (uint8_t)(32 * auroraPhase)});
+        DrawCircleV({cx + radius * 0.18f, cy + radius * 0.71f}, radius * 0.13f,
+                    Color{140, 230, 255, (uint8_t)(26 * auroraPhase)});
     }
 
     if (pl.type <= PT::Desert && pl.type != PT::Swamp) {
-        // Ice caps / polar regions for colder/dry worlds
-        float iceAlpha = (pl.type == PT::Radiated) ? 35 : 70;
-        DrawCircleV({cx, cy - radius * 0.78f}, radius * 0.32f, Color{235, 245, 255, (uint8_t)iceAlpha});
-        DrawCircleV({cx, cy + radius * 0.78f}, radius * 0.27f, Color{235, 245, 255, (uint8_t)(iceAlpha * 0.8f)});
+        // Ice caps / polar regions (pulled in, smaller so they sit on the globe, not separate)
+        float iceAlpha = (pl.type == PT::Radiated) ? 28 : 58;
+        DrawCircleV({cx, cy - radius * 0.71f}, radius * 0.21f, Color{235, 245, 255, (uint8_t)iceAlpha});
+        DrawCircleV({cx, cy + radius * 0.71f}, radius * 0.17f, Color{235, 245, 255, (uint8_t)(iceAlpha * 0.75f)});
     }
 
     // 8. Final bright highlight (specular)
@@ -2614,7 +2615,8 @@ int main(int argc, char** argv) {
 
 //                 ImGui::Separator();
         // ==================== Star System Menu (when inside a system) ====================
-        if (gInSystemView) {
+        // Hide when drilled into a planet so the immersive view + Planet Surface panel are the focus.
+        if (gInSystemView && !gInPlanetView) {
             auto* viewedSys = gGameState.galaxy.findSystemById(gViewedSystemId);
             if (viewedSys) {
                 ImGui::SetNextWindowPos(ImVec2(30, 40), ImGuiCond_FirstUseEver);
